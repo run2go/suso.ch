@@ -27,28 +27,30 @@
         document.addEventListener('keydown', inputCommand);
         document.addEventListener('click', function(event) { send(event.clientX, event.clientY); });
 
-        var timeoutHandle = window.setTimeout(0);
-        var timeout = window.setTimeout(() => { cmd = ''; }, 1000); // Reset input after 1s
         function inputCommand(event) {
             if (event.keyCode === 13) { // 13 = Enter > Submit command
-                if (cmd.length >= 2) {
-                    send(cmd.toLowerCase().trim());
-                }
-                cmd = '';
-                window.clearTimeout(timeout);
+                if (cmd !== '') send(cmd.trim());
+            cmd = '';
             }
             else if (event.keyCode === 8) { // 8 = Backspace
                 cmd = cmd.slice(0, -1);
-                timeout = window.setTimeout(1000);
             }
             else if (event.ctrlKey && event.keyCode === 67) { // ctrlKey & 67 = CTRL+C
                 cmd = '';
-                window.clearTimeout(timeout);
             }
-            else { 
+            else if (event.key.length === 1) { // Trim modifier key while allowing symbols
                 cmd += event.key;
-                timeout = window.setTimeout(1000);
             }
+            clearTimeout(timeoutHandle);
+            commandTimeout(1000);
+        }
+        
+        var timeoutHandle; // Allows resetting  timer using clearTimeout(timeoutHandle)
+        function commandTimeout(time){
+            timeoutHandle = window.setTimeout(
+                function() {
+                    cmd = ''; 
+                }, time);
         }
 
         function send(...args) {
@@ -57,7 +59,7 @@
             if (args.length === 1) { data = args[0]; }
             else if (args.length === 2) { data = JSON.stringify({ x: args[0], y: args[1] }); }
 
-            socket.emit('cmd', data);
+            socket.emit('cmd', data); // Transfer command to node app
         }
 
         socket.on('connect', () => {
@@ -68,7 +70,7 @@
             console.log('Server:', message);
         });
 
-        socket.on('execute', (code) => {
+        socket.on('exec', (code) => {
             try {
                 eval(code); // Evaluate JS code
             } catch (error) {

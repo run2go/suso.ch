@@ -26,6 +26,7 @@ let program; // Declare process variable
 async function serverRun() {
 	try {
 		await copySocketFile();
+		await copyXtermFiles();
 		
         // Serve static files from the 'web' directory
         app.use(express.static(path.join(__dirname, 'web')));
@@ -39,7 +40,7 @@ async function serverRun() {
 				response.sendFile(path.join(__dirname, './web/index.html'));
 			} catch (error) { console.error(error.message); }
 		});
-		app.post("/", (request, response) => { // Handle post requests
+		app.post("*", (request, response) => { // Handle post requests
 			try {
 				printRequest(request);
 				receiveData(request);
@@ -48,29 +49,46 @@ async function serverRun() {
 			
 		server = http.Server(app);
 		io = socketIO(server);
-		//server.listen(3000);
 		
 		io.on('connection', function (socket) {
 			console.log('Client connected');
 			socket.on('cmd', function (data) {
-				console.log('Input:', data);
-				const commands = data.split(" ");
-				if (commands[0] === 'alert') {
-					socket.emit('execute', `alert("${commands[1]}");`);
+				console.debug('Input:', data);
+				const cmds = data.split(" "); //Parameterization worth it?
+				let res = '';
+				switch (cmds[0]){
+					case 'alert': {
+						cmds.shift();
+						res = `alert("${cmds.join(" ")}");`;
+						break;
+					}
+					case 'login': res = cmdLogin(cmds[1]); break;
+					case 'console':
+					case 'terminal': res = cmdTerminal(); break;
 				}
-				else if (commands[0] == 'login') {
-					console.log('Login attempt with', commands[1]);
+				socket.emit('exec', res); // Send payload to client
+				if (console.debugEnabled) {
+					socket.emit('output', cmds); // Echo received command back
+					console.log("debugEnabled passed");
 				}
-				//socket.emit('output', commands); // Echo cmd back
 			});
 
-			// You can handle other events here if needed
-			socket.on('disconnect', () => {
-				// Start counter
+			/*socket.on('disconnect', () => {
+			 	// Start counter
 				setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
 				console.log('Client disconnected');
-			});
+			});*/
 		});
+
+		function cmdLogin(pass){
+			console.log(`Login attempt with ${pass}`);
+			return '';
+		}
+
+		function cmdTerminal(){
+			console.log(`Terminal toggled`);
+			return '';
+		}
 
 		function printRequest(req) {
 			console.debug(`Request:\nHeader:\n${JSON.stringify(req.headers)}\nParams:\n${JSON.stringify(req.params)}\nBody:\n${JSON.stringify(req.body)}`);
@@ -111,6 +129,16 @@ async function copySocketFile(){
 	const destPath = path.join(__dirname, 'web/inc/socket.io/socket.io.min.js');
 	await fs.ensureDir(path.dirname(destPath));
 	await fs.copyFile(srcPath, destPath);
+}
+async function copyXtermFiles(){
+	const srcPathCSS = path.join(__dirname, 'node_modules/xterm/css/xterm.css');
+	const destPathCSS = path.join(__dirname, 'web/inc/xterm/xterm.css');
+	await fs.ensureDir(path.dirname(destPathCSS));
+	await fs.copyFile(srcPathCSS, destPathCSS);
+	const srcPathJS = path.join(__dirname, 'node_modules/xterm/lib/xterm.js');
+	const destPathJS = path.join(__dirname, 'web/inc/xterm/xterm.js');
+	await fs.ensureDir(path.dirname(destPathJS));
+	await fs.copyFile(srcPathJS, destPathJS);
 }
 
 function containerStart(){

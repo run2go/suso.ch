@@ -67,6 +67,7 @@ function debug(...args) {
 
 module.exports = {
 	toggleDebug,
+	debugEnabled,
 	getTimestamp,
 	log,
 	warn,
