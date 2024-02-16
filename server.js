@@ -51,34 +51,42 @@ async function serverRun() {
 		io = socketIO(server);
 		
 		io.on('connection', function (socket) {
-			console.log('Client connected');
-			socket.on('cmd', function (data) {
-				console.debug('Input:', data);
-				const cmds = data.split(" "); //Parameterization worth it?
-				let res = '';
-				switch (cmds[0]){
-					case 'alert': {
-						cmds.shift();
-						res = `alert("${cmds.join(" ")}");`;
-						break;
+			if (socket.recovered) { // recovered session
+				console.log(`Client recovered - ${socket.id}`);
+			} else { // new or unrecoverable session
+				console.log(`Client connected - ${socket.id}`);
+				socket.on('cmd', function (data) {
+					const cmds = data.split(" "); //Parameterization worth it?
+					let res = '';
+					switch (cmds[0]){
+						case 'debug': console.toggleDebug(); break; // Temporary
+						case 'alert': {
+							cmds.shift();
+							res = `alert("${cmds.join(" ")}");`;
+							break;
+						}
+						case 'logout': res = cmdLogout(); break;
+						case 'login': res = cmdLogin(cmds[1]); break;
+						case 'console': 
+						case 'terminal': res = cmdTerminal(); break;
+						case 'test': socket.to(socket.id).emit("output", "testy test"); break;
 					}
-					case 'login': res = cmdLogin(cmds[1]); break;
-					case 'console':
-					case 'terminal': res = cmdTerminal(); break;
-				}
-				socket.emit('exec', res); // Send payload to client
-				if (console.debugEnabled) {
-					socket.emit('output', cmds); // Echo received command back
-					console.log("debugEnabled passed");
-				}
-			});
+					socket.emit('exec', res); // Send payload to client
+					console.debug('Input:', data);
+					if (console.checkDebug()) socket.emit('output', cmds); // Echo received command back
+				});
 
-			/*socket.on('disconnect', () => {
-			 	// Start counter
-				setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
-				console.log('Client disconnected');
-			});*/
+				socket.on('disconnect', () => {
+					// Start counter
+					setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
+					console.log(`Client disconnected - ${socket.id}`);
+				});
+			  }
 		});
+
+		function cmdLogout(){
+			return '';
+		}
 
 		function cmdLogin(pass){
 			console.log(`Login attempt with ${pass}`);
@@ -93,14 +101,17 @@ async function serverRun() {
 		function printRequest(req) {
 			console.debug(`Request:\nHeader:\n${JSON.stringify(req.headers)}\nParams:\n${JSON.stringify(req.params)}\nBody:\n${JSON.stringify(req.body)}`);
 		}	
+
 		function detectAgent(user) {
 			console.debug(user);
 			return !!(user.includes('curl') || user.includes('shell'));
 		}
+
 		function serveData(response, isAgentCLI) {
 			console.debug("CLI Agent: " + isAgentCLI);
 			response.sendFile(path.join(__dirname, isAgentCLI ? './cli.sh' : './web/index.html'));
 		}
+
 		function receiveData(request) {
 			// Placeholder
 		}
@@ -142,11 +153,11 @@ async function copyXtermFiles(){
 }
 
 function containerStart(){
-	// Start container
+	// Start container, create a new container using local image
 }
 
 function containerShutdown() {
-	// Shut container
+	// Shut container, --remove param will remove it
 }
 
 function serverRestart() {

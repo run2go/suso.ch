@@ -9,6 +9,11 @@ let debugEnabled = (process.env.DEBUG_ENABLED === "true");
 // Use the file system library to write to the logfile
 const fs = require('fs');
 
+// Check the current debug bool
+function checkDebug() {
+	return debugEnabled;
+}
+
 // Toggle Debug mode, return bool
 function toggleDebug() {
 	return !!(debugEnabled = !debugEnabled);
@@ -67,7 +72,7 @@ function debug(...args) {
 
 module.exports = {
 	toggleDebug,
-	debugEnabled,
+	checkDebug,
 	getTimestamp,
 	log,
 	warn,
