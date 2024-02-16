@@ -7,6 +7,9 @@ RUN echo "" > /etc/motd && echo "" > /etc/issue
 # Install Docker & net-tools packages
 RUN apk --no-cache add docker net-tools
 
+# Download the latest cloudflared binary
+RUN wget -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/bin/cloudflared
+
 # Download the ufetch-alpine script and save it as splash.sh
 RUN wget -O /usr/local/bin/splash.sh https://gitlab.com/jschx/ufetch/-/raw/main/ufetch-alpine
 

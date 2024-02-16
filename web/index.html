@@ -28,6 +28,7 @@
         document.addEventListener('click', function(event) { send(event.clientX, event.clientY); });
 
         function inputCommand(event) {
+            event.preventDefault();
             if (event.keyCode === 13) { // 13 = Enter > Submit command
                 if (cmd !== '') send(cmd.trim());
             cmd = '';
@@ -63,7 +64,15 @@
         }
 
         socket.on('connect', () => {
-            console.log('Connection established');
+            console.log('Connection to server established');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
+
+        socket.on('reconnect', () => {
+            console.log('Reconnected to server');
         });
 
         socket.on('output', (message) => {

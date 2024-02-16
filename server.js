@@ -15,19 +15,34 @@ HELP      Print this message.`;
 const fs = require('fs-extra'); // Use file system operations
 const path = require('path'); // Allows working with file & directory paths
 const console = require('./log.js'); // Use the logging functionality inside the log.js file
-var express = require('express'), // Make use of the express.js framework for the core application
-    app = express(), // Use express app with http server
-    http = require('http'), // Require http module
-    socketIO = require('socket.io'),  // Integrate socket.io
-    server, io;
 
-let program; // Declare process variable
+let program; // Declare program variable
 
 async function serverRun() {
 	try {
+		// Prepare Socket.io and Xterm.js client files
 		await copySocketFile();
 		await copyXtermFiles();
 		
+		// Import necessary modules
+		var express = require('express');
+		var http = require('http');
+		var socketIO = require('socket.io');
+
+		// Create Express app
+		var app = express();
+
+		// Create HTTP server
+		var server = http.createServer(app);
+
+		// Enable connection state recovery with Socket.IO
+		var io = new socketIO.Server(server, {
+			connectionStateRecovery: {
+				maxDisconnectionDuration: 2 * 60 * 1000, // Maximum duration of disconnection in milliseconds
+				skipMiddlewares: true // Whether to skip middlewares upon successful recovery
+			}
+		});
+
         // Serve static files from the 'web' directory
         app.use(express.static(path.join(__dirname, 'web')));
 		
@@ -51,38 +66,41 @@ async function serverRun() {
 		io = socketIO(server);
 		
 		io.on('connection', function (socket) {
-			if (socket.recovered) { // recovered session
-				console.log(`Client recovered - ${socket.id}`);
-			} else { // new or unrecoverable session
-				console.log(`Client connected - ${socket.id}`);
-				socket.on('cmd', function (data) {
-					const cmds = data.split(" "); //Parameterization worth it?
-					let res = '';
-					switch (cmds[0]){
-						case 'debug': console.toggleDebug(); break; // Temporary
-						case 'alert': {
-							cmds.shift();
-							res = `alert("${cmds.join(" ")}");`;
-							break;
-						}
-						case 'logout': res = cmdLogout(); break;
-						case 'login': res = cmdLogin(cmds[1]); break;
-						case 'console': 
-						case 'terminal': res = cmdTerminal(); break;
-						case 'test': socket.to(socket.id).emit("output", "testy test"); break;
-					}
-					socket.emit('exec', res); // Send payload to client
-					console.debug('Input:', data);
-					if (console.checkDebug()) socket.emit('output', cmds); // Echo received command back
-				});
+			console.log(`Client connected - ${socket.id}`);
+			socket.on('cmd', function (data) {
+				const cmds = data.split(" "); //Parameterization worth it?
+				let res = ''; // Prepare response
+				switch (cmds[0]){
+					case 'debug': console.toggleDebug(); break; // Temporary
+					case 'alert': res = cmdAlert(cmds); break;
+					case 'logout': res = cmdLogout(); break;
+					case 'login': res = cmdLogin(cmds[1]); break;
+					case 'console': 
+					case 'terminal': res = cmdTerminal(); break;
+					case 'test': socket.to(socket.id).emit("output", "testy test"); break;
+				}
+				socket.emit('exec', res); // Send payload to client
+				console.debug('Input:', data);
+				if (console.checkDebug()) socket.emit('output', cmds); // Echo received command back
+			});
 
-				socket.on('disconnect', () => {
-					// Start counter
-					setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
-					console.log(`Client disconnected - ${socket.id}`);
-				});
-			  }
+			socket.on('disconnect', () => {
+				// Start counter
+				//setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
+				console.log(`Client disconnected - ${socket.id}`);
+			});
+
+			socket.on('reconnect', () => {
+				console.log(`Client reconnected - ${socket.id}`);
+				//socket.recovered = true; // Set recovered flag to indicate the session has been recovered
+			});
 		});
+
+		function cmdAlert(cmds){
+			cmds.shift(); // trim mostleft "alert" entry
+			let message = cmds.join(" "); // reconstruct message
+			return `alert("${message}");`;
+		}
 
 		function cmdLogout(){
 			return '';
@@ -157,7 +175,7 @@ function containerStart(){
 }
 
 function containerShutdown() {
-	// Shut container, --remove param will remove it
+	// Shutdown container, --remove param will remove it
 }
 
 function serverRestart() {
