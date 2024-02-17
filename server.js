@@ -26,22 +26,22 @@ async function serverRun() {
 		await copyXtermFiles();
 		
 		// Import necessary modules
-		var express = require('express');
-		var http = require('http');
-		var socketIO = require('socket.io');
+		let express = require('express');
+		let http = require('http');
+		let socketIO = require('socket.io');
 		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
 
 		// Create Express app
-		var app = express();
+		let app = express();
 
 		// Enable CORS
 		app.use(cors());
 
 		// Create HTTP server
-		var server = http.createServer(app);
+		let server = http.createServer(app);
 
 		// Enable connection state recovery with Socket.IO
-		var io = new socketIO.Server(server, {
+		let io = new socketIO.Server(server, {
 			connectionStateRecovery: {
 				maxDisconnectionDuration: 2 * 60 * 1000, // Maximum duration of disconnection in milliseconds
 				skipMiddlewares: true // Whether to skip middlewares upon successful recovery
@@ -68,30 +68,23 @@ async function serverRun() {
 		server = http.Server(app);
 		io = socketIO(server);
 
-		const UUID = require('uuid'); // Import the ID package
-		function generateSessionId() {
-			return UUID.v4();
-		}
-		
 		const moment = require('moment'); // Use 'moment' library for timestamp handling
-		var sessionMap = new Map(); // Map to track Session IDs and associated sockets
+		let sessionMap = new Map(); // Map to track Session IDs and associated sockets
 
 		io.on('connection', (socket) => {
 			let sessionId = socket.handshake.query.sessionId;
-			// Generate a new Session ID if not provided by the client
-			if (!sessionId) {
+			// Generate a new Session ID if not provided or faulty by client
+			if (!sessionId || !validateSessionId(sessionId)) {
 				sessionId = generateSessionId();
 				socket.emit('sessionId', sessionId);
 			}
 			console.log(`Client connected - Session ID: ${sessionId}`);
 			// Store the Session ID and associated socket
 			sessionMap.set(sessionId, socket);
-			sessionMap.set(sessionId, { timestamp: moment() }); // Update the session timestamp
-
-			// Check if session is logged in
-			const loggedIn = isSessionLoggedIn(sessionId);
 
 			socket.on('cmd', function (data) {
+				sessionMap.set(sessionId, { timestamp: moment() }); // Update the session timestamp
+
 				const cmds = data.split(" ");
 				let res = ''; // Prepare response
 				switch (cmds[0]){ // Public commands
@@ -101,11 +94,11 @@ async function serverRun() {
 					case 'reload': res = "location.reload();"; break;
 					case 'help': res = `window.open("${helpURL}",'_blank');`; break;
 				}
-				if (loggedIn) { // Private commands
+				if (isSessionLoggedIn(sessionId)) { // Private commands
 					switch(cmds[0]) {
 						case 'logout': res = cmdLogout(sessionId); break;
-						case 'console': res = cmdConsole(socket, sessionId); break;
-						case 'terminal': res = cmdTerminal(socket, sessionId); break;
+						case 'console': res = cmdTerminal(socket, sessionId); break;
+						case 'terminal': res = cmdTerminal(socket, sessionId, true); break;
 					}
 				}
 				socket.emit('exec', res); // Send payload to client
@@ -134,33 +127,13 @@ async function serverRun() {
 		function cmdInfo(sessionId) {
 			const sessionData = sessionMap.get(sessionId);
 			const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData;
-			return `console.log("Session Data: ${sessionId}, ` +
-				   `Timestamp: ${timestamp}, ` +
-				   `Container ID: ${containerId}, ` +
-				   `LoginStatus: ${loggedIn}, ` +
-				   `Screen: ${screenWidth}x${screenHeight}");`;
+			return `console.log("Session ID: ${sessionId}` +
+				   `\\nTimestamp: ${timestamp}` +
+				   `\\nContainer ID: ${containerId}` +
+				   `\\nLoginStatus: ${loggedIn}` +
+				   `\\nScreen: ${screenWidth}x${screenHeight}");`;
 		}
-		
-		function replacer(key, value) {
-			if(value instanceof Map) {
-				return {
-				dataType: 'Map',
-				value: Array.from(value.entries()), // or with spread: value: [...value]
-				};
-			} else {
-				return value;
-			}
-		}
-		
-		function reviver(key, value) {
-			if(typeof value === 'object' && value !== null) {
-				if (value.dataType === 'Map') {
-				return new Map(value.value);
-				}
-			}
-			return value;
-		}
-			
+					
 		function cmdAlert(cmds){
 			cmds.shift(); // trim mostleft "alert" entry
 			let message = cmds.join(" "); // reconstruct message
@@ -187,12 +160,7 @@ async function serverRun() {
 
 		const pty = require('node-pty');
 		const os = require('os');
-		function cmdConsole(socket, sessionId) {
-			//const shell = pty.spawn() ...
-			return `console.log("Yes.");`;
-		}
-
-		function cmdTerminal(socket, sessionId) {
+		function cmdTerminal(socket, sessionId, local=false) { // Create terminal for the client
 			let sessionData = sessionMap.get(sessionId);
 			let screenWidth = sessionData.screenWidth;
 			let screenHeight = sessionData.screenHeight;
@@ -202,14 +170,26 @@ async function serverRun() {
 			const rows = Math.floor(screenHeight / 16); // Character height of 16px
 
 			// Create a new pseudo-terminal with a shell command (e.g., bash)
-			const shell = pty.spawn(os.platform() === 'win32' ? 'cmd.exe' : 'bash', [], {
-				name: 'xterm-color',
-				cols: cols,
-				rows: rows,
-				cwd: process.env.HOME,
-				env: process.env
-			});
-
+			let shell;
+			if (local) { // Attach local console
+				shell = pty.spawn(os.platform() === 'win32' ? 'cmd.exe' : 'bash', [], {
+					name: 'xterm-color',
+					cols: cols,
+					rows: rows,
+					cwd: process.env.HOME,
+					env: process.env
+				});
+			}
+			else { // Attach docker console
+				shell = pty.spawn(`docker attach ${123}`, [], {
+					name: 'xterm-color',
+					cols: cols,
+					rows: rows,
+					cwd: process.env.HOME,
+					env: process.env
+				});
+			}
+			
 			// Pipe the output of the pseudo-terminal to the socket
 			shell.onData(data => {
 				// Emit the data to the client
@@ -280,6 +260,17 @@ async function serverRun() {
 				// Wait 100ms for xterm files to load
 				setTimeout(() => { initializeTerminal(); }, 100);
 			`;
+		}
+
+		const uuid = require('uuid'); // Import the ID package
+		// Function to generate UUIDs as session IDs
+		function generateSessionId() {
+			return uuid.v4();
+		}
+
+		// Function to validate session UUIDs
+		function validateSessionId(sessionId) {
+			return sessionMap.has(sessionId);
 		}
 
 		// Function to check if a session is logged in

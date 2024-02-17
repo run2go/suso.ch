@@ -37,7 +37,7 @@
         // Event listener to receive Session ID from the server
         socket.on('sessionId', function(sessionId) {
             localStorage.setItem('sessionId', sessionId); // Store Session ID in localStorage
-            console.log('Received Session ID:', sessionId);
+            console.log('Received - Session ID:', sessionId);
         });
 
         let cmd = '';
