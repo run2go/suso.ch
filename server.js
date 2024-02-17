@@ -73,19 +73,21 @@ async function serverRun() {
 
 		io.on('connection', (socket) => {
 			let sessionId = socket.handshake.query.sessionId;
-			// Generate a new Session ID if not provided or faulty by client
-			if (!sessionId || !validateSessionId(sessionId)) {
+			// Generate client UUID if missing or invalid
+			if (!validateSessionId(sessionId)) {
 				sessionId = generateSessionId();
+				sessionMap.set(sessionId);
 				socket.emit('sessionId', sessionId);
 			}
 			console.log(`Client connected - Session ID: ${sessionId}`);
-			// Store the Session ID and associated socket
-			sessionMap.set(sessionId, socket);
 
 			socket.on('cmd', function (data) {
+				const cmds = data.split(" ");
 				sessionMap.set(sessionId, { timestamp: moment() }); // Update the session timestamp
 
-				const cmds = data.split(" ");
+				console.debug('Input:', data);
+				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
+				
 				let res = ''; // Prepare response
 				switch (cmds[0]){ // Public commands
 					case 'info': res = cmdInfo(sessionId); break;
@@ -102,14 +104,11 @@ async function serverRun() {
 					}
 				}
 				socket.emit('exec', res); // Send payload to client
-				console.debug('Input:', data);
-				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
 			});
 
 			// Handle disconnection
 			socket.on('disconnect', () => {
 				console.log(`Client disconnected - Session ID: ${sessionId}`);
-				sessionMap.delete(sessionId); // Remove the session from the map upon disconnection
 			});
 
 			let coordinates;
@@ -143,18 +142,20 @@ async function serverRun() {
 		function cmdLogin(sessionId, pass) {
 			console.log(`Login attempt with Session ID ${sessionId} and password ${pass}`);
 			
-			const isLoggedIn = (pass === 'test'); // Temporary, will be involving brcrypt later on
-
-			// Update session map with login status and timestamp
-			sessionMap.set(sessionId, { loggedIn: (isLoggedIn ? true : false), timestamp: moment() });
-			if (isLoggedIn) return `console.log("Logged in");`; // Only notify if login is successful
+			const isLoggedIn = !!(pass === 'test'); // Temporary
+			
+			if (isLoggedIn) { // Update session map with loggedIn status
+				sessionMap.set(sessionId, { loggedIn: true });
+				console.log(sessionMap.get(sessionId).loggedIn);
+				return `console.log("Logged in");`; // Only notify if login is successful
+			}
 		}
 
 		function cmdLogout(sessionId) {
 			console.log(`Session ID ${sessionId} logged out`);
 
-			// Update session map with login status and timestamp
-			sessionMap.set(sessionId, { loggedIn: false, timestamp: moment() });
+			// Update session map with loggedIn status
+			sessionMap.set(sessionId, { loggedIn: false });
 			return `console.log("Logged out");`;
 		}
 
@@ -275,9 +276,7 @@ async function serverRun() {
 
 		// Function to check if a session is logged in
 		function isSessionLoggedIn(sessionId) {
-			const sessionData = sessionMap.get(sessionId);
-			if (sessionData.loggedIn) return sessionData.loggedIn;
-			return false;
+			return !!(sessionMap.get(sessionId).loggedIn);
 		}
 
 		// Function to remove expired sessions
@@ -286,9 +285,9 @@ async function serverRun() {
 			for (const [sessionId, sessionData] of sessionMap.entries()) {
 				const diff = now.diff(sessionData.timestamp, 'minutes');
 				if (diff > sessionTimeout) {
-					sessionMap.delete(sessionId); // Delete the timed out session
 					// Check if sessionData contains containerId information
 					if (sessionData.containerId) containerRemove(sessionData.containerId);
+					sessionMap.delete(sessionId); // Delete the timed out session entry					
 				}
 			}
 		}
