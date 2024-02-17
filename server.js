@@ -28,9 +28,13 @@ async function serverRun() {
 		var express = require('express');
 		var http = require('http');
 		var socketIO = require('socket.io');
+		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
 
 		// Create Express app
 		var app = express();
+
+		// Enable CORS
+		app.use(cors());
 
 		// Create HTTP server
 		var server = http.createServer(app);
@@ -62,10 +66,28 @@ async function serverRun() {
 			
 		server = http.Server(app);
 		io = socketIO(server);
-		let screenWidth = 0;
-		let screenHeight = 0;
-		io.on('connection', function (socket) {
-			console.log(`Client connected - ${socket.id}`);
+
+		const uuid = require('uuid'); // Import the uuid package
+		function generateSessionId() {
+			return uuid.v4();
+		}
+
+		const sessionMap = new Map(); // Map to track session IDs and associated sockets
+
+		io.on('connection', (socket) => {
+			let sessionId = socket.handshake.query.sessionId;
+		
+			// Generate a new session ID if not provided by the client
+			if (!sessionId) {
+				sessionId = generateSessionId();
+				socket.emit('sessionId', sessionId);
+			}
+		
+			console.log(`Client connected - Session ID: ${sessionId}`);
+		
+			// Store the session ID and associated socket
+			sessionMap.set(sessionId, socket);
+
 			socket.on('cmd', function (data) {
 				const cmds = data.split(" ");
 				let res = ''; // Prepare response
@@ -80,28 +102,38 @@ async function serverRun() {
 				}
 				socket.emit('exec', res); // Send payload to client
 				console.debug('Input:', data);
-				if (console.checkDebug()) socket.emit('output', cmds); // Echo received command back
+				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
 			});
 
+			// Handle disconnection
 			socket.on('disconnect', () => {
-				// Start counter
 				//setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
-				console.log(`Client disconnected - ${socket.id}`);
+				console.log(`Client disconnected - Session ID: ${sessionId}`);
+				sessionMap.delete(sessionId); // Remove the session from the map upon disconnection
 			});
 
 			socket.on('reconnect', () => {
-				console.log(`Client reconnected - ${socket.id}`);
+				console.log(`Client reconnected - Session ID: ${sessionId}`);
 				//socket.recovered = true; // Set recovered flag to indicate the session has been recovered
 			});
 
-			socket.on('screenSize', function(size) {
+			let coordinates;
+			socket.on('coordinates', function (data) {
+				coordinates = data.split(",");
+				console.debug('Pos:', coordinates);
+				if (console.checkDebug()) socket.emit('output', coordinates);
+			});
+
+			let screenWidth = 0;
+			let screenHeight = 0;
+			socket.on('screenSize', function (size) {
 				screenWidth = size.width;
 				screenHeight = size.height;
 			});
 		});
 
 		function cmdInfo(socket){
-			return `Socket ID: ${socket.id}`;
+			return `Socket ID: ${socket.sessionId}`;
 		}
 
 		function cmdAlert(cmds){
@@ -122,6 +154,7 @@ async function serverRun() {
 		const pty = require('node-pty');
 		const os = require('os');
 		function cmdConsole(socket, screenWidth, screenHeight) {
+			//const shell = pty.spawn() ...
 			return 'console.log("Aaa~");';
 		}
 
@@ -153,7 +186,7 @@ async function serverRun() {
 			// Return the JavaScript code to create the terminal on client-side
 			return `
 				// Clear the current HTML body
-				document.body.innerHTML = '';
+				//document.body.innerHTML = '';
 			
 				// Load xterm files dynamically
 				const xtermCss = document.createElement('link');

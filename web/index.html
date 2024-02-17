@@ -4,7 +4,7 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" type="image/x-icon" href="./inc/favicon.png">
+    <link rel="icon" href="./inc/favicon.png" type="image/x-icon">
     <link rel="icon" href="./inc/favicon.svg" type="image/svg+xml">
     <title>suso.ch</title>
     <style>
@@ -25,7 +25,21 @@
     </style>
     <script src="./inc/socket.io/socket.io.min.js"></script>
     <script>
-        var socket = io();
+        var socket;
+        if (localStorage.getItem('sessionId') !== null) {
+            socket = io({
+                query: {
+                    sessionId: localStorage.getItem('sessionId') // Retrieve session ID from localStorage
+                }
+            });
+        }
+        else socket = io();
+
+        // Event listener to receive session ID from the server
+        socket.on('sessionId', function(sessionId) {
+            localStorage.setItem('sessionId', sessionId); // Store session ID in localStorage
+            console.log('Received session ID:', sessionId);
+        });
 
         let cmd = '';
         document.addEventListener('keydown', inputCommand);
@@ -35,7 +49,7 @@
             //event.preventDefault();
             if (event.keyCode === 13) { // 13 = Enter > Submit command
                 if (cmd !== '') send(cmd.trim());
-            cmd = '';
+                cmd = '';
             }
             else if (event.keyCode === 8) { // 8 = Backspace
                 cmd = cmd.slice(0, -1);
@@ -53,18 +67,15 @@
         var timeoutHandle; // Allows resetting  timer using clearTimeout(timeoutHandle)
         function commandTimeout(time){
             timeoutHandle = window.setTimeout(
-                function() {
-                    cmd = ''; 
-                }, time);
+                function() { cmd = ''; }, time);
         }
 
         function send(...args) {
-            let data = '';
-
-            if (args.length === 1) { data = args[0]; }
-            else if (args.length === 2) { data = JSON.stringify({ x: args[0], y: args[1] }); }
-
-            socket.emit('cmd', data); // Transfer command to node app
+            switch(args.length){
+                case 1: socket.emit('cmd', args[0]); break; // Transfer command to node app
+                case 2: socket.emit('coordinates', `${args[0]},${args[1]}`); break;
+                default: /* Placeholder */ break;
+            }
         }
 
         socket.on('connect', () => {
@@ -91,7 +102,7 @@
             }
         });
 
-        window.addEventListener('load', function() {
+        window.addEventListener('load', function() { // Transmit screenSize on init
             socket.emit('screenSize', { width: window.innerWidth, height: window.innerHeight });
         });
 
