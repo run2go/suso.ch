@@ -26,19 +26,18 @@
     <script src="./inc/socket.io/socket.io.min.js"></script>
     <script>
         var socket;
+        var session = localStorage.getItem('sessionId');
         if (localStorage.getItem('sessionId') !== null) {
             socket = io({
-                query: {
-                    sessionId: localStorage.getItem('sessionId') // Retrieve session ID from localStorage
-                }
+                query: { sessionId: session } // Retrieve Session ID from localStorage
             });
         }
         else socket = io();
 
-        // Event listener to receive session ID from the server
+        // Event listener to receive Session ID from the server
         socket.on('sessionId', function(sessionId) {
-            localStorage.setItem('sessionId', sessionId); // Store session ID in localStorage
-            console.log('Received session ID:', sessionId);
+            localStorage.setItem('sessionId', sessionId); // Store Session ID in localStorage
+            console.log('Received Session ID:', sessionId);
         });
 
         let cmd = '';
@@ -79,15 +78,11 @@
         }
 
         socket.on('connect', () => {
-            console.log('Connection to server established');
+            console.log(`Connected - Session ID: ${session}`);
         });
 
         socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-        });
-
-        socket.on('reconnect', () => {
-            console.log('Reconnected to server');
+            console.log(`Disconnected - Session ID: ${session}`);
         });
 
         socket.on('output', (message) => {

@@ -5,6 +5,7 @@ const serverName = process.env.SERVER_NAME;
 const serverPort = process.env.SERVER_PORT;
 const serverAddress = process.env.SERVER_ADDRESS;
 const helpURL = process.env.HELP_URL;
+const sessionTimeout = process.env.SESSION_TIMEOUT;
 
 const helpText = `Visit ${helpURL} for more information
 RESTART   Restart the server instance.
@@ -67,38 +68,45 @@ async function serverRun() {
 		server = http.Server(app);
 		io = socketIO(server);
 
-		const uuid = require('uuid'); // Import the uuid package
+		const UUID = require('uuid'); // Import the ID package
 		function generateSessionId() {
-			return uuid.v4();
+			return UUID.v4();
 		}
-
-		const sessionMap = new Map(); // Map to track session IDs and associated sockets
+		
+		const moment = require('moment'); // Use 'moment' library for timestamp handling
+		var sessionMap = new Map(); // Map to track Session IDs and associated sockets
 
 		io.on('connection', (socket) => {
 			let sessionId = socket.handshake.query.sessionId;
-		
-			// Generate a new session ID if not provided by the client
+			// Generate a new Session ID if not provided by the client
 			if (!sessionId) {
 				sessionId = generateSessionId();
 				socket.emit('sessionId', sessionId);
 			}
-		
 			console.log(`Client connected - Session ID: ${sessionId}`);
-		
-			// Store the session ID and associated socket
+			// Store the Session ID and associated socket
 			sessionMap.set(sessionId, socket);
+			sessionMap.set(sessionId, { timestamp: moment() }); // Update the session timestamp
+
+			// Check if session is logged in
+			const loggedIn = isSessionLoggedIn(sessionId);
 
 			socket.on('cmd', function (data) {
 				const cmds = data.split(" ");
 				let res = ''; // Prepare response
-				switch (cmds[0]){
-					case 'info': res = cmdInfo(socket); break;
+				switch (cmds[0]){ // Public commands
+					case 'info': res = cmdInfo(sessionId); break;
 					case 'alert': res = cmdAlert(cmds); break;
-					case 'logout': res = cmdLogout(); break;
-					case 'login': res = cmdLogin(cmds[1]); break;
+					case 'login': res = cmdLogin(sessionId, cmds[1]); break;
 					case 'reload': res = "location.reload();"; break;
-					case 'console': res = cmdConsole(socket, screenWidth, screenHeight); break;
-					case 'terminal': res = cmdTerminal(socket, screenWidth, screenHeight); break;
+					case 'help': res = `window.open("${helpURL}",'_blank');`; break;
+				}
+				if (loggedIn) { // Private commands
+					switch(cmds[0]) {
+						case 'logout': res = cmdLogout(sessionId); break;
+						case 'console': res = cmdConsole(socket, sessionId); break;
+						case 'terminal': res = cmdTerminal(socket, sessionId); break;
+					}
 				}
 				socket.emit('exec', res); // Send payload to client
 				console.debug('Input:', data);
@@ -107,14 +115,8 @@ async function serverRun() {
 
 			// Handle disconnection
 			socket.on('disconnect', () => {
-				//setTimeout(() => { containerShutdown(); }, 1200000); // => 20min
 				console.log(`Client disconnected - Session ID: ${sessionId}`);
 				sessionMap.delete(sessionId); // Remove the session from the map upon disconnection
-			});
-
-			socket.on('reconnect', () => {
-				console.log(`Client reconnected - Session ID: ${sessionId}`);
-				//socket.recovered = true; // Set recovered flag to indicate the session has been recovered
 			});
 
 			let coordinates;
@@ -124,41 +126,77 @@ async function serverRun() {
 				if (console.checkDebug()) socket.emit('output', coordinates);
 			});
 
-			let screenWidth = 0;
-			let screenHeight = 0;
 			socket.on('screenSize', function (size) {
-				screenWidth = size.width;
-				screenHeight = size.height;
+				sessionMap.set(sessionId, { screenWidth: size.width, screenHeight: size.height});
 			});
 		});
 
-		function cmdInfo(socket){
-			return `Socket ID: ${socket.sessionId}`;
+		function cmdInfo(sessionId) {
+			const sessionData = sessionMap.get(sessionId);
+			const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData;
+			return `console.log("Session Data: ${sessionId}, ` +
+				   `Timestamp: ${timestamp}, ` +
+				   `Container ID: ${containerId}, ` +
+				   `LoginStatus: ${loggedIn}, ` +
+				   `Screen: ${screenWidth}x${screenHeight}");`;
 		}
-
+		
+		function replacer(key, value) {
+			if(value instanceof Map) {
+				return {
+				dataType: 'Map',
+				value: Array.from(value.entries()), // or with spread: value: [...value]
+				};
+			} else {
+				return value;
+			}
+		}
+		
+		function reviver(key, value) {
+			if(typeof value === 'object' && value !== null) {
+				if (value.dataType === 'Map') {
+				return new Map(value.value);
+				}
+			}
+			return value;
+		}
+			
 		function cmdAlert(cmds){
 			cmds.shift(); // trim mostleft "alert" entry
 			let message = cmds.join(" "); // reconstruct message
 			return `alert("${message}");`;
 		}
 
-		function cmdLogout(){
-			return '';
+		function cmdLogin(sessionId, pass) {
+			console.log(`Login attempt with Session ID ${sessionId} and password ${pass}`);
+			
+			const isLoggedIn = (pass === 'test'); // Temporary, will be involving brcrypt later on
+
+			// Update session map with login status and timestamp
+			sessionMap.set(sessionId, { loggedIn: (isLoggedIn ? true : false), timestamp: moment() });
+			if (isLoggedIn) return `console.log("Logged in");`; // Only notify if login is successful
 		}
 
-		function cmdLogin(pass){
-			console.log(`Login attempt with ${pass}`);
-			return '';
+		function cmdLogout(sessionId) {
+			console.log(`Session ID ${sessionId} logged out`);
+
+			// Update session map with login status and timestamp
+			sessionMap.set(sessionId, { loggedIn: false, timestamp: moment() });
+			return `console.log("Logged out");`;
 		}
 
 		const pty = require('node-pty');
 		const os = require('os');
-		function cmdConsole(socket, screenWidth, screenHeight) {
+		function cmdConsole(socket, sessionId) {
 			//const shell = pty.spawn() ...
-			return 'console.log("Aaa~");';
+			return `console.log("Yes.");`;
 		}
 
-		function cmdTerminal(socket, screenWidth, screenHeight) {
+		function cmdTerminal(socket, sessionId) {
+			let sessionData = sessionMap.get(sessionId);
+			let screenWidth = sessionData.screenWidth;
+			let screenHeight = sessionData.screenHeight;
+
 			// Use the stored screen size information to calculate cols and rows
 			const cols = Math.floor(screenWidth / 8); // Character width of 8px
 			const rows = Math.floor(screenHeight / 16); // Character height of 16px
@@ -244,6 +282,38 @@ async function serverRun() {
 			`;
 		}
 
+		// Function to check if a session is logged in
+		function isSessionLoggedIn(sessionId) {
+			const sessionData = sessionMap.get(sessionId);
+			if (sessionData.loggedIn) return sessionData.loggedIn;
+			return false;
+		}
+
+		// Function to remove expired sessions
+		function removeExpiredSessions() {
+			const now = moment();
+			for (const [sessionId, sessionData] of sessionMap.entries()) {
+				const diff = now.diff(sessionData.timestamp, 'minutes');
+				if (diff > sessionTimeout) {
+					sessionMap.delete(sessionId); // Delete the timed out session
+					// Check if sessionData contains containerId information
+					if (sessionData.containerId) containerRemove(sessionData.containerId);
+				}
+			}
+		}
+		// Timer to periodically remove expired sessions (every minute)
+		setInterval(removeExpiredSessions, 60000);
+
+
+		function containerCreate(){
+			// Start container, create a new container using local image
+		
+		}
+		
+		function containerRemove(containerId) {
+			// Force delete container
+		}
+
 		function printRequest(req) {
 			console.debug(`Request:\nHeader:\n${JSON.stringify(req.headers)}\nParams:\n${JSON.stringify(req.params)}\nBody:\n${JSON.stringify(req.body)}`);
 		}	
@@ -300,15 +370,6 @@ async function copyXtermFiles(){
 	const destPathJSaddon = path.join(__dirname, 'web/inc/xterm/xterm-addon-fit.js');
 	await fs.ensureDir(path.dirname(destPathJSaddon));
 	await fs.copyFile(srcPathJSaddon, destPathJSaddon);
-}
-
-function containerStart(){
-	// Start container, create a new container using local image
-
-}
-
-function containerShutdown() {
-	// Shutdown container, --remove param will remove it upon shutdown
 }
 
 function serverRestart() {
