@@ -47,37 +47,36 @@ async function serverRun() {
         app.use(express.static(path.join(__dirname, 'web')));
 		
 		app.get('*', function (request, response) { // Handle GET requests
-			//response.sendFile(__dirname + '/web/index.html');
 			try {
-				printRequest(request);
+				//printRequest(request);
 				isAgentCLI = detectAgent(request.headers['user-agent'].toLowerCase());
 				serveData(response, isAgentCLI);
-				response.sendFile(path.join(__dirname, './web/index.html'));
 			} catch (error) { console.error(error.message); }
 		});
 		app.post("*", (request, response) => { // Handle post requests
 			try {
-				printRequest(request);
+				//printRequest(request);
 				receiveData(request);
 			} catch (error) { console.error(error.message); }
 		});
 			
 		server = http.Server(app);
 		io = socketIO(server);
-		
+		let screenWidth = 0;
+		let screenHeight = 0;
 		io.on('connection', function (socket) {
 			console.log(`Client connected - ${socket.id}`);
 			socket.on('cmd', function (data) {
-				const cmds = data.split(" "); //Parameterization worth it?
+				const cmds = data.split(" ");
 				let res = ''; // Prepare response
 				switch (cmds[0]){
-					case 'debug': console.toggleDebug(); break; // Temporary
+					case 'info': res = cmdInfo(socket); break;
 					case 'alert': res = cmdAlert(cmds); break;
 					case 'logout': res = cmdLogout(); break;
 					case 'login': res = cmdLogin(cmds[1]); break;
-					case 'console': 
-					case 'terminal': res = cmdTerminal(); break;
-					case 'test': socket.to(socket.id).emit("output", "testy test"); break;
+					case 'reload': res = "location.reload();"; break;
+					case 'console': res = cmdConsole(socket, screenWidth, screenHeight); break;
+					case 'terminal': res = cmdTerminal(socket, screenWidth, screenHeight); break;
 				}
 				socket.emit('exec', res); // Send payload to client
 				console.debug('Input:', data);
@@ -94,7 +93,16 @@ async function serverRun() {
 				console.log(`Client reconnected - ${socket.id}`);
 				//socket.recovered = true; // Set recovered flag to indicate the session has been recovered
 			});
+
+			socket.on('screenSize', function(size) {
+				screenWidth = size.width;
+				screenHeight = size.height;
+			});
 		});
+
+		function cmdInfo(socket){
+			return `Socket ID: ${socket.id}`;
+		}
 
 		function cmdAlert(cmds){
 			cmds.shift(); // trim mostleft "alert" entry
@@ -111,9 +119,96 @@ async function serverRun() {
 			return '';
 		}
 
-		function cmdTerminal(){
-			console.log(`Terminal toggled`);
-			return '';
+		const pty = require('node-pty');
+		const os = require('os');
+		function cmdConsole(socket, screenWidth, screenHeight) {
+			return 'console.log("Aaa~");';
+		}
+
+		function cmdTerminal(socket, screenWidth, screenHeight) {
+			// Use the stored screen size information to calculate cols and rows
+			const cols = Math.floor(screenWidth / 8); // Character width of 8px
+			const rows = Math.floor(screenHeight / 16); // Character height of 16px
+
+			// Create a new pseudo-terminal with a shell command (e.g., bash)
+			const shell = pty.spawn(os.platform() === 'win32' ? 'cmd.exe' : 'bash', [], {
+				name: 'xterm-color',
+				cols: cols,
+				rows: rows,
+				cwd: process.env.HOME,
+				env: process.env
+			});
+
+			// Pipe the output of the pseudo-terminal to the socket
+			shell.onData(data => {
+				// Emit the data to the client
+				socket.emit('terminalOutput', data);
+			});
+
+			// Handle input from the client and write it to the pseudo-terminal
+			socket.on('terminalInput', input => {
+				shell.write(input);
+			});
+
+			// Return the JavaScript code to create the terminal on client-side
+			return `
+				// Clear the current HTML body
+				document.body.innerHTML = '';
+			
+				// Load xterm files dynamically
+				const xtermCss = document.createElement('link');
+				xtermCss.rel = 'stylesheet';
+				xtermCss.type = 'text/css';
+				xtermCss.href = './inc/xterm/xterm.css';
+				document.head.appendChild(xtermCss);
+
+				// Create a parent element for the terminal
+				const terminalContainer = document.createElement('div');
+				terminalContainer.id = 'terminal-container';
+				document.body.appendChild(terminalContainer);
+				
+				// Apply CSS to make the terminal container span the entire screen
+				terminalContainer.style.position = 'absolute';
+				terminalContainer.style.top = '0';
+				terminalContainer.style.left = '0';
+				terminalContainer.style.width = '100%';
+				terminalContainer.style.height = '100%';
+				
+				const xtermScript = document.createElement('script');
+				xtermScript.src = './inc/xterm/xterm.js';
+				xtermScript.async = true;
+				document.head.appendChild(xtermScript);
+
+				const xtermScriptAddon = document.createElement('script');
+				xtermScriptAddon.src = './inc/xterm/xterm-addon-fit.js';
+				xtermScriptAddon.async = true;
+				document.head.appendChild(xtermScriptAddon);
+			
+				// Function to initialize terminal once xterm.js is loaded
+				function initializeTerminal() {
+
+					// Initialize xterm.js
+					const term = new Terminal();
+					term.open(terminalContainer);
+
+					// Apply the fit addon to automatically fit the terminal size to its container
+					const fitAddon = new FitAddon.FitAddon();
+					term.loadAddon(fitAddon);
+					fitAddon.fit();
+				
+					// Listen for terminal output from the server
+					socket.on('terminalOutput', data => {
+						term.write(data);
+					});
+				
+					// Listen for user input and send it to the server
+					term.onData(data => {
+						socket.emit('terminalInput', data);
+					});
+				}
+				// Wait 100ms for xterm files to load
+				setTimeout(() => { initializeTerminal(); }, 100);
+			`;
 		}
 
 		function printRequest(req) {
@@ -121,7 +216,6 @@ async function serverRun() {
 		}	
 
 		function detectAgent(user) {
-			console.debug(user);
 			return !!(user.includes('curl') || user.includes('shell'));
 		}
 
@@ -142,6 +236,7 @@ async function serverRun() {
 				case 'stop': serverShutdown(); break;
 				case 'debug': console.log(`Debug Status: ${console.toggleDebug()}`); break;
 				case 'help': console.log(helpText); break;
+				case '': break; // Handle empty cmds (e.g. just 'Enter')
 				default: console.log(`Unknown command`);
 			}
 		});
@@ -168,14 +263,19 @@ async function copyXtermFiles(){
 	const destPathJS = path.join(__dirname, 'web/inc/xterm/xterm.js');
 	await fs.ensureDir(path.dirname(destPathJS));
 	await fs.copyFile(srcPathJS, destPathJS);
+	const srcPathJSaddon = path.join(__dirname, 'node_modules/xterm-addon-fit/lib/xterm-addon-fit.js');
+	const destPathJSaddon = path.join(__dirname, 'web/inc/xterm/xterm-addon-fit.js');
+	await fs.ensureDir(path.dirname(destPathJSaddon));
+	await fs.copyFile(srcPathJSaddon, destPathJSaddon);
 }
 
 function containerStart(){
 	// Start container, create a new container using local image
+
 }
 
 function containerShutdown() {
-	// Shutdown container, --remove param will remove it
+	// Shutdown container, --remove param will remove it upon shutdown
 }
 
 function serverRestart() {

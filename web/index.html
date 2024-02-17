@@ -8,11 +8,15 @@
     <link rel="icon" href="./inc/favicon.svg" type="image/svg+xml">
     <title>suso.ch</title>
     <style>
+        :root {
+            color-scheme: dark;
+        }
         body {
             margin: 0;
             background-color: black;
             display: flex;
             height: 100vh;
+            overflow: hidden; /* Hide Scrollbar */
         }
         .logo {
             width: 30%;
@@ -28,7 +32,7 @@
         document.addEventListener('click', function(event) { send(event.clientX, event.clientY); });
 
         function inputCommand(event) {
-            event.preventDefault();
+            //event.preventDefault();
             if (event.keyCode === 13) { // 13 = Enter > Submit command
                 if (cmd !== '') send(cmd.trim());
             cmd = '';
@@ -86,6 +90,11 @@
                 console.error('Execution error:', error);
             }
         });
+
+        window.addEventListener('load', function() {
+            socket.emit('screenSize', { width: window.innerWidth, height: window.innerHeight });
+        });
+
     </script>
 </head>
 
