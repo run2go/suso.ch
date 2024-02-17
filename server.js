@@ -69,14 +69,14 @@ async function serverRun() {
 		io = socketIO(server);
 
 		const moment = require('moment'); // Use 'moment' library for timestamp handling
-		let sessionMap = new Map(); // Map to track Session IDs and associated sockets
+		let sessionMap = new Map(); // Map Session IDs to track associated sockets & data
 
 		io.on('connection', (socket) => {
 			let sessionId = socket.handshake.query.sessionId;
 			// Generate client UUID if missing or invalid
 			if (!validateSessionId(sessionId)) {
 				sessionId = generateSessionId();
-				sessionMap.set(sessionId);
+				sessionMap.set(sessionId); // Add new map entry
 				socket.emit('sessionId', sessionId);
 			}
 			console.log(`Client connected - Session ID: ${sessionId}`);
@@ -111,9 +111,8 @@ async function serverRun() {
 				console.log(`Client disconnected - Session ID: ${sessionId}`);
 			});
 
-			let coordinates;
 			socket.on('coordinates', function (data) {
-				coordinates = data.split(",");
+				let coordinates = data.split(",");
 				console.debug('Pos:', coordinates);
 				if (console.checkDebug()) socket.emit('output', coordinates);
 			});
@@ -146,7 +145,6 @@ async function serverRun() {
 			
 			if (isLoggedIn) { // Update session map with loggedIn status
 				sessionMap.set(sessionId, { loggedIn: true });
-				console.log(sessionMap.get(sessionId).loggedIn);
 				return `console.log("Logged in");`; // Only notify if login is successful
 			}
 		}
@@ -271,7 +269,7 @@ async function serverRun() {
 
 		// Function to validate session UUIDs
 		function validateSessionId(sessionId) {
-			return sessionMap.has(sessionId);
+			return !!(sessionMap.has(sessionId));
 		}
 
 		// Function to check if a session is logged in
@@ -283,7 +281,7 @@ async function serverRun() {
 		function removeExpiredSessions() {
 			const now = moment();
 			for (const [sessionId, sessionData] of sessionMap.entries()) {
-				const diff = now.diff(sessionData.timestamp, 'minutes');
+				const diff = now.diff(sessionData.timestamp, 'minutes'); // breaks if undefined timestamp
 				if (diff > sessionTimeout) {
 					// Check if sessionData contains containerId information
 					if (sessionData.containerId) containerRemove(sessionData.containerId);
