@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# Run splash.sh to update motd
-/usr/local/bin/splash.sh >> /etc/motd
+# Run splash.sh to replace & update motd
+/usr/local/bin/splash.sh > /etc/motd
 
 # Append a line break to motd
 echo "" >> /etc/motd
