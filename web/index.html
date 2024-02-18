@@ -100,9 +100,6 @@
         socket.on('screenSize', (code) => { // Transmit screenSize on request
             socket.emit('screenSize', { width: window.innerWidth, height: window.innerHeight });
         });
-        window.addEventListener('load', function() { // Transmit screenSize on init
-            socket.emit('screenSize', { width: window.innerWidth, height: window.innerHeight });
-        });
 
     </script>
 </head>

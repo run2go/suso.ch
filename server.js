@@ -77,7 +77,8 @@ async function serverRun() {
 			if (!isSessionValid(sessionId)) {
 				sessionId = generateSessionId(); // Generate new session
 				sessionMap.set(sessionId); // Add new map entry
-				socket.emit('sessionId', sessionId);
+				socket.emit('sessionId', sessionId); // Assign sessionId
+				socket.emit('screenSize'); // Request screen data
 			}
 			console.log(`Client connected - Session ID: ${sessionId}`);
 
