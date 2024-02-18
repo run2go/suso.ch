@@ -16,12 +16,16 @@
             background-color: black;
             display: flex;
             height: 100vh;
-            overflow: hidden; /* Hide Scrollbar */
+            overflow: hidden;
         }
         #logo {
             width: 30%;
             height: 30%;
-            transition: display 200ms;
+            margin: auto;
+            background: rgba(0, 0, 0, 0);
+            display: block;
+            position: relative;
+            transform: translate(0.5s, width 0.5s, height 0.5s, opacity 0.5s);
         }
     </style>
     <script src="./inc/socket.io/socket.io.min.js"></script>
@@ -90,23 +94,23 @@
             console.log('Server:', message);
         });
 
-        socket.on('exec', (code) => {
+        socket.on('eval', (code) => {
             try {
                 eval(code); // Evaluate JS code
             } catch (error) {
-                console.error('Execution error:', error);
+                console.error('Evaluation error:', error);
             }
         });
 
         socket.on('screenSize', (code) => { // Transmit screenSize on request
             socket.emit('screenSize', { width: window.innerWidth, height: window.innerHeight });
         });
-
+        
     </script>
 </head>
 
 <body>
-    <svg id="logo" style="margin: auto; background: rgba(0, 0, 0, 0); display: block;" viewBox="0 0 100 100">
+    <svg id="logo" viewBox="0 0 100 100">
         <path fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-dasharray="128.3 128.3" d="M24.3 30C11.4 30 5 43.3 5 50s6.4 20 19.3 20c19.3 0 32.1-40 51.4-40 C88.6 30 95 43.3 95 50s-6.4 20-19.3 20C56.4 70 43.6 30 24.3 30z">
             <animate attributeName="stroke-dashoffset" repeatCount="indefinite" dur="3s" keyTimes="0;1" values="0;256.0"></animate>
         </path>
