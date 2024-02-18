@@ -1,6 +1,6 @@
 // server.js
 
-require('dotenv').config({ path: 'config.cfg' }); // Access parameters in the config.ini file
+require('dotenv').config({ path: './config/config.cfg' }); // Access parameters in the config.ini file
 const serverName = process.env.SERVER_NAME;
 const serverPort = process.env.SERVER_PORT;
 const serverAddress = process.env.SERVER_ADDRESS;
@@ -77,7 +77,7 @@ async function serverRun() {
 
 		const moment = require('moment'); // Use 'moment' library for timestamp handling
 		let sessionMap = new Map(); // Map Session IDs to track associated sockets & data
-		const authData = JSON.parse(fs.readFileSync('auth.json', 'utf8')); // Load the auth.json file
+		const authData = JSON.parse(fs.readFileSync('./config/auth.json', 'utf8')); // Load the auth.json file
 		const authList = authData.auth;
 
 		io.on('connection', (socket) => {
@@ -99,22 +99,32 @@ async function serverRun() {
 				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
 
 				let res;
-				switch (cmds[0]){ // Public commands
-					case 'info': res = cmdInfo(sessionId); break;
-					case 'alert': res = cmdAlert(cmds); break;
-					case 'login': res = cmdLogin(sessionId, cmds[1]); break;
-					case 'reload': res = "location.reload();"; break;
-					case 'help': res = `window.open("${helpURL}",'_blank');`; break;
-				}
-				if (isSessionLoggedIn(sessionId)) { // Private commands
-					switch(cmds[0]) {
-						case 'logout': res = cmdLogout(sessionId); break;
-						case 'console': cmdTerminal(socket, sessionId); break;
-						case 'terminal': cmdTerminal(socket, sessionId, true); break;
-						case 'exit': res = `location.reload();`; break;
+				const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
+				const privateCommands = ['logout', 'console', 'terminal', 'exit'];
+				// Check if the command partially matches any of the public commands
+				const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
+				const partialPrivateMatch = privateCommands.find(command => command.startsWith(cmds[0]));
+        
+				if (partialPublicMatch) {
+					switch (partialPublicMatch){ // Public commands
+						case 'info': res = cmdInfo(sessionId); break;
+						case 'alert': res = cmdAlert(cmds); break;
+						case 'login': res = cmdLogin(socket, sessionId, cmds[1]); break;
+						case 'reload': res = "location.reload();"; break;
+						case 'github':
+						case 'help': res = `window.open("${helpURL}",'_blank');`; break;
+						case 'theme': res = cmdTheme(socket); break;
 					}
 				}
-				if (res) socket.emit('exec', res); // Send payload to client
+				else if (partialPrivateMatch && isSessionLoggedIn(sessionId)) { // Private commands
+					switch(partialPrivateMatch) {
+						case 'logout': res = cmdLogout(socket, sessionId); break;
+						case 'console': cmdTerminal(socket, sessionId); break;
+						case 'terminal': cmdTerminal(socket, sessionId, true); break;
+						case 'exit': cmdReset(socket); break;
+					}
+				}
+				if (res) socket.emit('eval', res); // Send payload to client
 				//printSessionMap(); // Display sessionMap data
 			});
 
@@ -155,21 +165,35 @@ async function serverRun() {
 		function comparePassword(pass) {
 			return authList.some((hash) => bcrypt.compareSync(pass, hash));
 		}
-		function cmdLogin(sessionId, pass) {
+		function cmdLogin(socket, sessionId, pass = '') {
 			if (comparePassword(pass)) {
 				console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
 				updateSession(sessionId, { loggedIn: true });
+				const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
+				socket.emit('eval', validScript);
 				return `console.warn("Logged in");`; // Only notify if login is successful
 			}
 			else console.debug(`Failed login attempt with password "${pass}" from Session ID ${sessionId}`);
 		}
 
-		function cmdLogout(sessionId) {
+		function cmdLogout(socket, sessionId) {
 			console.log(`Session ID ${sessionId} logged out`);
 
 			// Update session map with loggedIn status
 			updateSession(sessionId, { loggedIn: false });
-			return `console.warn("Logged out"); location.reload();`;
+			const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
+			socket.emit('eval', validScript);
+			return `console.warn("Logged out");`;
+		}
+
+		function cmdTheme(socket) { // Invert everything
+			const themeScript = fs.readFileSync('./stream/theme.js', 'utf8');
+			socket.emit('eval', themeScript);
+		}
+
+		function cmdReset(socket) { // Reset the client page
+			const resetScript = fs.readFileSync('./stream/reset.js', 'utf8');
+			socket.emit('eval', resetScript);
 		}
 
 		const pty = require('node-pty');
@@ -228,13 +252,13 @@ async function serverRun() {
 				// Listen for the exit event
 				shell.on('exit', () => {
 					console.log('Terminal closed');
-					socket.emit('exec', 'location.reload();');
+					cmdReset(socket);
 					// Perform any cleanup or handle the closure here
 				});
 				// Return the JavaScript code to create the terminal on client-side
-				const terminalScript = fs.readFileSync('stream-terminal.js', 'utf8');
-				socket.emit('exec', terminalScript);
-			}else socket.emit('exec', `console.warn("Couldn't connect to terminal");`);
+				const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
+				socket.emit('eval', terminalScript);
+			}else socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
 		}
 
 		const uuid = require('uuid'); // Import the ID package
@@ -316,7 +340,7 @@ async function serverRun() {
 
 				// Compare modification times of Dockerfile and entrypoint with image creation time
 				if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime) {
-					console.debug('Creating new Docker image...');
+					console.debug('Creating new Docker image.');
 					// Create the new image
 					const tarStream = await docker.buildImage({
 						context: process.cwd(),
