@@ -74,8 +74,8 @@ async function serverRun() {
 		io.on('connection', (socket) => {
 			let sessionId = socket.handshake.query.sessionId;
 			// Generate client UUID if missing or invalid
-			if (!validateSessionId(sessionId)) {
-				sessionId = generateSessionId();
+			if (!isSessionValid(sessionId)) {
+				sessionId = generateSessionId(); // Generate new session
 				sessionMap.set(sessionId); // Add new map entry
 				socket.emit('sessionId', sessionId);
 			}
@@ -83,12 +83,13 @@ async function serverRun() {
 
 			socket.on('cmd', function (data) {
 				const cmds = data.split(" ");
-				sessionMap.set(sessionId, { timestamp: moment() }); // Update the session timestamp
+				updateSession(sessionId, { timestamp: moment() }); // Update the session timestamp
 
 				console.debug('Input:', data);
 				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
-				
-				let res = ''; // Prepare response
+				printSessionMap();
+
+				let res;
 				switch (cmds[0]){ // Public commands
 					case 'info': res = cmdInfo(sessionId); break;
 					case 'alert': res = cmdAlert(cmds); break;
@@ -101,9 +102,10 @@ async function serverRun() {
 						case 'logout': res = cmdLogout(sessionId); break;
 						case 'console': res = cmdTerminal(socket, sessionId); break;
 						case 'terminal': res = cmdTerminal(socket, sessionId, true); break;
+						case 'exit': res = `location.reload();`; break;
 					}
 				}
-				socket.emit('exec', res); // Send payload to client
+				if (res) socket.emit('exec', res); // Send payload to client
 			});
 
 			// Handle disconnection
@@ -118,20 +120,20 @@ async function serverRun() {
 			});
 
 			socket.on('screenSize', function (size) {
-				sessionMap.set(sessionId, { screenWidth: size.width, screenHeight: size.height});
+				updateSession(sessionId, { screenWidth: size.width, screenHeight: size.height});
 			});
 		});
 
 		function cmdInfo(sessionId) {
 			const sessionData = sessionMap.get(sessionId);
-			const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData;
+			const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData ?? '';
 			return `console.log("Session ID: ${sessionId}` +
 				   `\\nTimestamp: ${timestamp}` +
 				   `\\nContainer ID: ${containerId}` +
 				   `\\nLoginStatus: ${loggedIn}` +
-				   `\\nScreen: ${screenWidth}x${screenHeight}");`;
+				   `\\nScreen: ${screenWidth} x ${screenHeight}");`;
 		}
-					
+		
 		function cmdAlert(cmds){
 			cmds.shift(); // trim mostleft "alert" entry
 			let message = cmds.join(" "); // reconstruct message
@@ -144,7 +146,7 @@ async function serverRun() {
 			const isLoggedIn = !!(pass === 'test'); // Temporary
 			
 			if (isLoggedIn) { // Update session map with loggedIn status
-				sessionMap.set(sessionId, { loggedIn: true });
+				updateSession(sessionId, { loggedIn: true });
 				return `console.log("Logged in");`; // Only notify if login is successful
 			}
 		}
@@ -153,8 +155,8 @@ async function serverRun() {
 			console.log(`Session ID ${sessionId} logged out`);
 
 			// Update session map with loggedIn status
-			sessionMap.set(sessionId, { loggedIn: false });
-			return `console.log("Logged out");`;
+			updateSession(sessionId, { loggedIn: false });
+			return `console.log("Logged out"); location.reload();`;
 		}
 
 		const pty = require('node-pty');
@@ -268,7 +270,7 @@ async function serverRun() {
 		}
 
 		// Function to validate session UUIDs
-		function validateSessionId(sessionId) {
+		function isSessionValid(sessionId) {
 			return !!(sessionMap.has(sessionId));
 		}
 
@@ -277,21 +279,43 @@ async function serverRun() {
 			return !!(sessionMap.get(sessionId).loggedIn);
 		}
 
-		// Function to remove expired sessions
+		// Function to remove expired sessions & cleanup containers
 		function removeExpiredSessions() {
 			const now = moment();
 			for (const [sessionId, sessionData] of sessionMap.entries()) {
-				const diff = now.diff(sessionData.timestamp, 'minutes'); // breaks if undefined timestamp
-				if (diff > sessionTimeout) {
-					// Check if sessionData contains containerId information
-					if (sessionData.containerId) containerRemove(sessionData.containerId);
-					sessionMap.delete(sessionId); // Delete the timed out session entry					
+				if (sessionData.timestamp) {
+					const diff = now.diff(sessionData.timestamp, 'minutes'); // breaks if undefined timestamp
+					if (diff > sessionTimeout) {
+						// Check if sessionData contains containerId information
+						containerRemove(sessionData.containerId);
+						sessionMap.delete(sessionId); // Delete the timed out session entry					
+					}
 				}
 			}
 		}
 		// Timer to periodically remove expired sessions (every minute)
 		setInterval(removeExpiredSessions, 60000);
 
+		// Function to update the sessionMap while making sure to maintain existing values.
+		function updateSession(sessionId, newData) {
+			const existingData = sessionMap.get(sessionId);
+			const updatedData = { ...existingData, ...newData };
+			sessionMap.set(sessionId, updatedData);
+		}
+
+		// Helper function to keep track of sessionMap values
+		function printSessionMap() {
+			console.debug(`Session Map Data, total entries '${sessionMap.size}':`);
+			sessionMap.forEach((value, key) => {
+				const sessionData = sessionMap.get(key);
+				const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData ?? '';
+				console.debug(`Session ID: ${key}` +
+					`\nTimestamp: ${timestamp}` +
+					`\nContainer ID: ${containerId}` +
+					`\nLoginStatus: ${loggedIn}` +
+					`\nScreen: ${screenWidth} x ${screenHeight}`);
+			});
+		}
 
 		function containerCreate(){
 			// Start container, create a new container using local image
@@ -299,6 +323,7 @@ async function serverRun() {
 		}
 		
 		function containerRemove(containerId) {
+			//if (containerId) ..
 			// Force delete container
 		}
 
@@ -318,7 +343,7 @@ async function serverRun() {
 		function receiveData(request) {
 			// Placeholder
 		}
-		
+
 		process.stdin.resume();
 		process.stdin.setEncoding('utf8');
 		process.stdin.on('data', function (text) { // Allow console commands
