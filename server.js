@@ -20,16 +20,23 @@ const console = require('./log.js'); // Use the logging functionality inside the
 let program; // Declare program variable
 
 async function serverRun() {
-	try {
-		// Prepare Socket.io and Xterm.js client files
-		await copySocketFile();
-		await copyXtermFiles();
-		
+	try {		
 		// Import necessary modules
 		let express = require('express');
 		let http = require('http');
 		let socketIO = require('socket.io');
 		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
+
+		// Require dockerode for container management
+		const Docker = require('dockerode');
+		const docker = new Docker();
+		const { promisify } = require('util');
+		const statAsync = promisify(fs.stat);
+
+		// Prepare Socket.io and Xterm.js client files
+		await copyFiles();
+		// Create Docker image if outdated
+		await imageCreate();
 
 		// Create Express app
 		let app = express();
@@ -102,13 +109,13 @@ async function serverRun() {
 				if (isSessionLoggedIn(sessionId)) { // Private commands
 					switch(cmds[0]) {
 						case 'logout': res = cmdLogout(sessionId); break;
-						case 'console': res = cmdTerminal(socket, sessionId); break;
-						case 'terminal': res = cmdTerminal(socket, sessionId, true); break;
+						case 'console': cmdTerminal(socket, sessionId); break;
+						case 'terminal': cmdTerminal(socket, sessionId, true); break;
 						case 'exit': res = `location.reload();`; break;
 					}
 				}
 				if (res) socket.emit('exec', res); // Send payload to client
-				printSessionMap(); // Display sessionMap data
+				//printSessionMap(); // Display sessionMap data
 			});
 
 			// Handle disconnection
@@ -130,7 +137,7 @@ async function serverRun() {
 		function cmdInfo(sessionId) {
 			const sessionData = sessionMap.get(sessionId);
 			const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData ?? '';
-			return `console.log("Session ID: ${sessionId}` +
+			return `console.warn("Session ID: ${sessionId}` +
 				   `\\nTimestamp: ${timestamp}` +
 				   `\\nContainer ID: ${containerId}` +
 				   `\\nLoginStatus: ${loggedIn}` +
@@ -152,7 +159,7 @@ async function serverRun() {
 			if (comparePassword(pass)) {
 				console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
 				updateSession(sessionId, { loggedIn: true });
-				return `console.log("Logged in");`; // Only notify if login is successful
+				return `console.warn("Logged in");`; // Only notify if login is successful
 			}
 			else console.debug(`Failed login attempt with password "${pass}" from Session ID ${sessionId}`);
 		}
@@ -162,12 +169,12 @@ async function serverRun() {
 
 			// Update session map with loggedIn status
 			updateSession(sessionId, { loggedIn: false });
-			return `console.log("Logged out"); location.reload();`;
+			return `console.warn("Logged out"); location.reload();`;
 		}
 
 		const pty = require('node-pty');
 		const os = require('os');
-		function cmdTerminal(socket, sessionId, local=false) { // Create terminal for the client
+		async function cmdTerminal(socket, sessionId, local=false) { // Create terminal for the client
 			let sessionData = sessionMap.get(sessionId);
 			let screenWidth = sessionData.screenWidth;
 			let screenHeight = sessionData.screenHeight;
@@ -186,87 +193,48 @@ async function serverRun() {
 					cwd: process.env.HOME,
 					env: process.env
 				});
+				console.debug("Spawned server terminal");
 			}
 			else { // Attach docker console
-				shell = pty.spawn(`docker attach ${123}`, [], {
-					name: 'xterm-color',
-					cols: cols,
-					rows: rows,
-					cwd: process.env.HOME,
-					env: process.env
-				});
-			}
-			
-			// Pipe the output of the pseudo-terminal to the socket
-			shell.onData(data => {
-				// Emit the data to the client
-				socket.emit('terminalOutput', data);
-			});
-
-			// Handle input from the client and write it to the pseudo-terminal
-			socket.on('terminalInput', input => {
-				shell.write(input);
-			});
-
-			// Return the JavaScript code to create the terminal on client-side
-			return `
-				// Clear the current HTML body
-				//document.body.innerHTML = '';
-			
-				// Load xterm files dynamically
-				const xtermCss = document.createElement('link');
-				xtermCss.rel = 'stylesheet';
-				xtermCss.type = 'text/css';
-				xtermCss.href = './inc/xterm/xterm.css';
-				document.head.appendChild(xtermCss);
-
-				// Create a parent element for the terminal
-				const terminalContainer = document.createElement('div');
-				terminalContainer.id = 'terminal-container';
-				document.body.appendChild(terminalContainer);
-				
-				// Apply CSS to make the terminal container span the entire screen
-				terminalContainer.style.position = 'absolute';
-				terminalContainer.style.top = '0';
-				terminalContainer.style.left = '0';
-				terminalContainer.style.width = '100%';
-				terminalContainer.style.height = '100%';
-				
-				const xtermScript = document.createElement('script');
-				xtermScript.src = './inc/xterm/xterm.js';
-				xtermScript.async = true;
-				document.head.appendChild(xtermScript);
-
-				const xtermScriptAddon = document.createElement('script');
-				xtermScriptAddon.src = './inc/xterm/xterm-addon-fit.js';
-				xtermScriptAddon.async = true;
-				document.head.appendChild(xtermScriptAddon);
-			
-				// Function to initialize terminal once xterm.js is loaded
-				function initializeTerminal() {
-
-					// Initialize xterm.js
-					const term = new Terminal();
-					term.open(terminalContainer);
-
-					// Apply the fit addon to automatically fit the terminal size to its container
-					const fitAddon = new FitAddon.FitAddon();
-					term.loadAddon(fitAddon);
-					fitAddon.fit();
-				
-					// Listen for terminal output from the server
-					socket.on('terminalOutput', data => {
-						term.write(data);
-					});
-				
-					// Listen for user input and send it to the server
-					term.onData(data => {
-						socket.emit('terminalInput', data);
+				// Create and start a new Docker container
+				const containerId = await containerCreate();
+				if (containerId) {
+					// Update the sessionMap with the containerId
+					updateSession(sessionId, { containerId: containerId });
+		
+					// Attach to the Docker container's pseudo-terminal
+					shell = pty.spawn('docker', ['attach', containerId], {
+						name: 'xterm-color',
+						cols: cols,
+						rows: rows,
+						cwd: process.env.HOME,
+						env: process.env
 					});
 				}
-				// Wait 100ms for xterm files to load
-				setTimeout(() => { initializeTerminal(); }, 100);
-			`;
+				else console.debug('Failed to create and start Docker container: ' + shell);
+			}
+			if (shell){
+				// Pipe the output of the pseudo-terminal to the socket
+				shell.onData(data => {
+					// Emit the data to the client
+					socket.emit('terminalOutput', data);
+				});
+
+				// Handle input from the client and write it to the pseudo-terminal
+				socket.on('terminalInput', input => {
+					shell.write(input);
+				});
+
+				// Listen for the exit event
+				shell.on('exit', () => {
+					console.log('Terminal closed');
+					socket.emit('exec', 'location.reload();');
+					// Perform any cleanup or handle the closure here
+				});
+				// Return the JavaScript code to create the terminal on client-side
+				const terminalScript = fs.readFileSync('stream-terminal.js', 'utf8');
+				socket.emit('exec', terminalScript);
+			}else socket.emit('exec', `console.warn("Couldn't connect to terminal");`);
 		}
 
 		const uuid = require('uuid'); // Import the ID package
@@ -323,15 +291,96 @@ async function serverRun() {
 			});
 		}
 
-		function containerCreate(){
-			// Start container, create a new container using local image
+		async function imageCreate() {
+			try {
+				const imageName = 'sandboxImage';
+				const dockerfilePath = './container/Dockerfile';
+				const entrypointPath = './container/entrypoint.sh';
+
+				// Check if the Dockerfile or entrypoint file has been modified
+				const [dockerfileStats, entrypointStats] = await Promise.all([
+					statAsync(dockerfilePath),
+					statAsync(entrypointPath)
+				]);
+
+				// Get the creation date of the Docker image
+				let imageCreatedTime;
+				try {
+					const image = await docker.getImage(imageName);
+					const inspectData = await image.inspect();
+					imageCreatedTime = new Date(inspectData.Created);
+				} catch (error) {
+					// Image does not exist
+					imageCreatedTime = new Date(0);
+				}
+
+				// Compare modification times of Dockerfile and entrypoint with image creation time
+				if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime) {
+					console.debug('Creating new Docker image...');
+					// Create the new image
+					const tarStream = await docker.buildImage({
+						context: process.cwd(),
+						src: ['./container']
+					}, { t: imageName });
+
+					await new Promise((resolve, reject) => {
+						docker.modem.followProgress(tarStream, (err, res) => {
+							if (err) {
+								reject(err);
+							} else {
+								resolve(res);
+							}
+						});
+					});
+
+					console.debug('Docker image created successfully.');
+				} else {
+					console.debug('Docker image is up to date. No need to create a new image.');
+				}
+			} catch (error) {
+				console.error('Failed to create Docker image:', error);
+			}
+		}
+
+		async function containerCreate() {
+			try {
+				// Create a new Docker container with the --rm flag
+				const container = await docker.createContainer({
+					Image: 'sandboxImage',
+					Tty: true,
+					AttachStdin: true,
+					AttachStdout: true,
+					AttachStderr: true,
+					OpenStdin: true,
+					StdinOnce: false,
+					Cmd: ['/bin/bash'], // or any other command you want to run
+					HostConfig: {
+						AutoRemove: true // Set the --rm flag
+					}
+				});
 		
+				// Start the container
+				await container.start();
+		
+				// Return the container ID
+				return container.id;
+			} catch (error) {
+				console.error('Error creating and starting Docker container:', error);
+				return null;
+			}
 		}
 		
-		function containerRemove(containerId) {
-			//if (containerId) ..
-			// Force delete container
+		async function containerRemove(containerId) {
+			try {
+				const container = docker.getContainer(containerId);
+				await container.stop(); // Stop the container
+				await container.remove(); // Remove the container
+				console.log(`Container ${containerId} removed successfully.`);
+			} catch (error) {
+				console.error(`Error removing container ${containerId}:`, error);
+			}
 		}
+		
 
 		function printRequest(req) {
 			console.debug(`Request:\nHeader:\n${JSON.stringify(req.headers)}\nParams:\n${JSON.stringify(req.params)}\nBody:\n${JSON.stringify(req.body)}`);
@@ -342,12 +391,12 @@ async function serverRun() {
 		}
 
 		function serveData(response, isAgentCLI) {
-			console.debug("CLI Agent: " + isAgentCLI);
+			console.debug("Browser Agent: " + !isAgentCLI);
 			response.sendFile(path.join(__dirname, isAgentCLI ? './cli.sh' : './web/index.html'));
 		}
 
 		function receiveData(request) {
-			// Placeholder
+			console.debug("Transmitted Data: " + request.body);
 		}
 
 		process.stdin.resume();
@@ -370,37 +419,57 @@ async function serverRun() {
 	} catch (error) { console.error(`[ERROR] ${error.message}`); }
 }
 
-async function copySocketFile(){
-	const srcPath = path.join(__dirname, 'node_modules/socket.io/client-dist/socket.io.min.js');
-	const destPath = path.join(__dirname, 'web/inc/socket.io/socket.io.min.js');
-	await fs.ensureDir(path.dirname(destPath));
-	await fs.copyFile(srcPath, destPath);
+// Copy socket.io and xterm.js files
+async function copyFiles() {
+    const filePairs = [
+        [
+            path.join(__dirname, 'node_modules/socket.io/client-dist/socket.io.min.js'),
+            path.join(__dirname, 'web/inc/socket.io/socket.io.min.js')
+        ],
+        [
+            path.join(__dirname, 'node_modules/xterm/css/xterm.css'),
+            path.join(__dirname, 'web/inc/xterm/xterm.css')
+        ],
+        [
+            path.join(__dirname, 'node_modules/xterm/lib/xterm.js'),
+            path.join(__dirname, 'web/inc/xterm/xterm.js')
+        ],
+        [
+            path.join(__dirname, 'node_modules/xterm-addon-fit/lib/xterm-addon-fit.js'),
+            path.join(__dirname, 'web/inc/xterm/xterm-addon-fit.js')
+        ]
+    ];
+    try {
+        for (const [src, dest] of filePairs) {
+            const srcStat = await fs.stat(src);
+            const destStat = await fs.stat(dest);
+
+            // Check if source file is newer than destination file
+            if (srcStat.mtime > destStat.mtime) {
+                await fs.ensureDir(path.dirname(dest));
+                await fs.copyFile(src, dest);
+                console.debug(`Copied ${src} to ${dest}`);
+            } else {
+                console.debug(`File ${src} is up to date. No need to copy.`);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to copy files:', error);
+    }
 }
-async function copyXtermFiles(){
-	const srcPathCSS = path.join(__dirname, 'node_modules/xterm/css/xterm.css');
-	const destPathCSS = path.join(__dirname, 'web/inc/xterm/xterm.css');
-	await fs.ensureDir(path.dirname(destPathCSS));
-	await fs.copyFile(srcPathCSS, destPathCSS);
-	const srcPathJS = path.join(__dirname, 'node_modules/xterm/lib/xterm.js');
-	const destPathJS = path.join(__dirname, 'web/inc/xterm/xterm.js');
-	await fs.ensureDir(path.dirname(destPathJS));
-	await fs.copyFile(srcPathJS, destPathJS);
-	const srcPathJSaddon = path.join(__dirname, 'node_modules/xterm-addon-fit/lib/xterm-addon-fit.js');
-	const destPathJSaddon = path.join(__dirname, 'web/inc/xterm/xterm-addon-fit.js');
-	await fs.ensureDir(path.dirname(destPathJSaddon));
-	await fs.copyFile(srcPathJSaddon, destPathJSaddon);
-}
+
 
 function serverRestart() {
 	program.close(() => { console.log(`${serverName} restarted`); }); // Close the server, trigger restart
+    setTimeout(() => { serverTerminate(); }, 2000);
 }
 function serverShutdown() { // Graceful shutdown function, forces shutdown if exit process fails
-	console.log(`${serverName} stopped`);
+	console.log(`${serverName} WebApp stopped`);
     program.close(() => { process.exit(0); });
     setTimeout(() => { serverTerminate(); }, 100); // Force shutdown if server hasn't stopped within 0.1s
 }
 function serverTerminate() {
-	console.error(`${serverName} terminated`);
+	console.error(`${serverName} WebApp terminated`);
 	process.exit(12);
 }
 
