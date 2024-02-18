@@ -1,8 +1,7 @@
 #!/bin/bash
-version=0.1
+version=0.2
 app="suso.ch"
-address="https://tunnel.suso.ch/"
-ssh_port="30022"
+address="https://suso.ch/"
 debug=0
 active="main"
 menu=(main help login dl)
@@ -32,8 +31,10 @@ menu_help(){
     echo
 }
 menu_login(){
-    read -r -p "Enter your passcode to authenticate: " pass_code
-    ssh "user@$address:$ssh_port" -P "$pass_code" # Replace with xterm tty streaming
+    read -r -p "Enter the target: " target
+    read -r -p "Enter your username: " user
+    read -r -p "Enter your passcode to authenticate: " pass
+    ssh "$user@$target" -P "$pass"
 }
 menu_dl(){
     file_pick="null"
@@ -86,13 +87,3 @@ while [ "$input" != "exit" ]; do # Main Loop
         echo "Active: $active"
     fi
 done
-
-# Append " | sh" to your curl command
-# Append " | sh" to your curl command
-# Append " | sh" to your curl command
-# Example: "curl suso.ch | sh"
-# Example: "curl suso.ch | sh"
-# Example: "curl suso.ch | sh"
-# Append " | sh" to your curl command
-# Append " | sh" to your curl command
-# Append " | sh" to your curl command
