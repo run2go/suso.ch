@@ -18,6 +18,7 @@ const path = require('path'); // Allows working with file & directory paths
 const console = require('./log.js'); // Use the logging functionality inside the log.js file
 
 let program; // Declare program variable
+let sockets = []; // Maintain a list of active sockets
 
 async function serverRun() {
 	try {		
@@ -81,6 +82,7 @@ async function serverRun() {
 		const authList = authData.auth;
 
 		io.on('connection', (socket) => {
+			sockets.push(socket);
 			let sessionId = socket.handshake.query.sessionId;
 			// Generate client UUID if missing or invalid
 			if (!isSessionValid(sessionId)) {
@@ -130,6 +132,7 @@ async function serverRun() {
 
 			// Handle disconnection
 			socket.on('disconnect', () => {
+				sockets = sockets.filter(s => s !== socket);
 				console.log(`Client disconnected - Session ID: ${sessionId}`);
 			});
 
@@ -165,15 +168,18 @@ async function serverRun() {
 		function comparePassword(pass) {
 			return authList.some((hash) => bcrypt.compareSync(pass, hash));
 		}
-		function cmdLogin(socket, sessionId, pass = '') {
-			if (comparePassword(pass)) {
-				console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
-				updateSession(sessionId, { loggedIn: true });
-				const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
-				socket.emit('eval', validScript);
-				return `console.warn("Logged in");`; // Only notify if login is successful
+		function cmdLogin(socket, sessionId, pass) {
+			if (isSessionLoggedIn(sessionId)) return cmdLogout(socket, sessionId); // Logout if no pass & already logged in
+			else if (pass) {
+				if (comparePassword(pass)) {
+					console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
+					updateSession(sessionId, { loggedIn: true });
+					const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
+					socket.emit('eval', validScript);
+					return `console.warn("Logged in");`; // Only notify if login is successful
+				}
+				else console.debug(`Failed login attempt with password "${pass}" from Session ID ${sessionId}`);
 			}
-			else console.debug(`Failed login attempt with password "${pass}" from Session ID ${sessionId}`);
 		}
 
 		function cmdLogout(socket, sessionId) {
@@ -427,8 +433,8 @@ async function serverRun() {
 		process.stdin.setEncoding('utf8');
 		process.stdin.on('data', function (text) { // Allow console commands
 			switch(text.trim().toLowerCase()) {
-				case 'restart': serverRestart(); break;
-				case 'stop': serverShutdown(); break;
+				case 'restart': serverRestart(server); break;
+				case 'stop': serverShutdown(server); break;
 				case 'debug': console.log(`Debug Status: ${console.toggleDebug()}`); break;
 				case 'help': console.log(helpText); break;
 				case '': break; // Handle empty cmds (e.g. just 'Enter')
@@ -482,14 +488,16 @@ async function copyFiles() {
     }
 }
 
-
-function serverRestart() {
-	program.close(() => { console.log(`${serverName} restarted`); }); // Close the server, trigger restart
-    setTimeout(() => { serverTerminate(); }, 2000);
+function serverRestart(server) {
+    sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets
+	server.close(() => {});
+	program.close(() => { console.log(`${serverName} WebApp restarting`); }); // Close the server, trigger restart
+	serverRun(); // server doesn't close properly, needs fixing
 }
-function serverShutdown() { // Graceful shutdown function, forces shutdown if exit process fails
-	console.log(`${serverName} WebApp stopped`);
+function serverShutdown(server) { // Graceful shutdown function, forces shutdown if exit process fails
+    sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets
     program.close(() => { process.exit(0); });
+	console.log(`${serverName} WebApp stopped`);
     setTimeout(() => { serverTerminate(); }, 100); // Force shutdown if server hasn't stopped within 0.1s
 }
 function serverTerminate() {
