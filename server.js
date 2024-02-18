@@ -70,6 +70,8 @@ async function serverRun() {
 
 		const moment = require('moment'); // Use 'moment' library for timestamp handling
 		let sessionMap = new Map(); // Map Session IDs to track associated sockets & data
+		const authData = JSON.parse(fs.readFileSync('auth.json', 'utf8')); // Load the auth.json file
+		const authList = authData.auth;
 
 		io.on('connection', (socket) => {
 			let sessionId = socket.handshake.query.sessionId;
@@ -88,7 +90,6 @@ async function serverRun() {
 
 				console.debug('Input:', data);
 				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
-				printSessionMap();
 
 				let res;
 				switch (cmds[0]){ // Public commands
@@ -107,6 +108,7 @@ async function serverRun() {
 					}
 				}
 				if (res) socket.emit('exec', res); // Send payload to client
+				printSessionMap(); // Display sessionMap data
 			});
 
 			// Handle disconnection
@@ -141,15 +143,18 @@ async function serverRun() {
 			return `alert("${message}");`;
 		}
 
+		// Function to compare password with hashed passwords in authList
+		const bcrypt = require('bcrypt');
+		function comparePassword(pass) {
+			return authList.some((hash) => bcrypt.compareSync(pass, hash));
+		}
 		function cmdLogin(sessionId, pass) {
-			console.log(`Login attempt with Session ID ${sessionId} and password ${pass}`);
-			
-			const isLoggedIn = !!(pass === 'test'); // Temporary
-			
-			if (isLoggedIn) { // Update session map with loggedIn status
+			if (comparePassword(pass)) {
+				console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
 				updateSession(sessionId, { loggedIn: true });
 				return `console.log("Logged in");`; // Only notify if login is successful
 			}
+			else console.debug(`Failed login attempt with password "${pass}" from Session ID ${sessionId}`);
 		}
 
 		function cmdLogout(sessionId) {
@@ -285,7 +290,7 @@ async function serverRun() {
 			const now = moment();
 			for (const [sessionId, sessionData] of sessionMap.entries()) {
 				if (sessionData.timestamp) {
-					const diff = now.diff(sessionData.timestamp, 'minutes'); // breaks if undefined timestamp
+					const diff = now.diff(sessionData.timestamp, 'minutes');
 					if (diff > sessionTimeout) {
 						// Check if sessionData contains containerId information
 						containerRemove(sessionData.containerId);
