@@ -4,8 +4,8 @@ FROM alpine:latest
 # Clear the motd and issue files
 RUN echo "" > /etc/motd && echo "" > /etc/issue
 
-# Install Docker & net-tools packages
-RUN apk --no-cache add docker net-tools
+# Install packages
+RUN apk --no-cache add docker net-tools curl
 
 # Download the latest cloudflared binary
 RUN wget -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
