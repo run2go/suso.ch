@@ -48,14 +48,14 @@ function log(...args) {
 }
 function warn(...args) {
 	const formattedDate = getTimestamp();
-    const warnMessage = `[${formattedDate}] ${args[0]} ${args.slice(1).join(' ')}`;
+    const warnMessage = `[${formattedDate}] [WARN] ${args[0]} ${args.slice(1).join(' ')}`;
 
     originalConsoleWarn(warnMessage);
     if (loggingEnabled) { fs.appendFileSync(logFilePath, warnMessage + '\n'); }
 }
 function error(...args) {
 	const formattedDate = getTimestamp();
-    const errorMessage = `[${formattedDate}] ${args[0]} ${args.slice(1).join(' ')}`;
+    const errorMessage = `[${formattedDate}] [ERROR] ${args[0]} ${args.slice(1).join(' ')}`;
 
     originalConsoleError(errorMessage);
     if (loggingEnabled) { fs.appendFileSync(logFilePath, errorMessage + '\n'); }
