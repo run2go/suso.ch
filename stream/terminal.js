@@ -1,5 +1,3 @@
-// Terminal Data
-
 // Transition logo, fade out
 const logo = document.querySelector('#logo');
 logo.style.transition = 'transform 0.5s, width 0.5s, height 0.5s, opacity 0.5s';
