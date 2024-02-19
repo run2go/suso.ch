@@ -46,41 +46,48 @@
         });
 
         let cmd = '';
+        let timeout = 1000;
         document.addEventListener('keydown', inputCommand);
         document.addEventListener('click', function(event) { send(event.clientX, event.clientY); });
-
-        function inputCommand(event) {
-            //event.preventDefault();
-            if (event.keyCode === 13) { // 13 = Enter > Submit command
-                if (cmd !== '') send(cmd.trim());
-                cmd = '';
-            }
-            else if (event.keyCode === 8) { // 8 = Backspace
-                cmd = cmd.slice(0, -1);
-            }
-            else if (event.ctrlKey && event.keyCode === 67) { // ctrlKey & 67 = CTRL+C
-                cmd = '';
-            }
-            else if (event.key.length === 1) { // Trim modifier key while allowing symbols
-                cmd += event.key;
+        function inputCommand(e) {
+            //e.preventDefault();
+            switch (e.key){
+                case "Escape": send(e.key); cmd = ''; break;
+                case "Enter": { if (cmd !== '') send(cmd.trim()); cmd = ''; break; }
+                case "Backspace": cmd = cmd.slice(0, -1); break;
+                case "C": if (e.ctrlKey && e.key === "C") cmd = ''; break;
+                default: if (e.key.length === 1) cmd += e.key; break;
             }
             clearTimeout(timeoutHandle);
-            commandTimeout(1000);
+            commandTimeout(timeout);
         }
         
-        var timeoutHandle; // Allows resetting  timer using clearTimeout(timeoutHandle)
+        var timeoutHandle; // Allows resetting timer using clearTimeout(timeoutHandle)
         function commandTimeout(time){
-            timeoutHandle = window.setTimeout(
-                function() { cmd = ''; }, time);
+            timeoutHandle = window.setTimeout( function() { cmd = ''; }, time );
         }
 
         function send(...args) {
             switch(args.length){
-                case 1: socket.emit('cmd', args[0]); break; // Transfer command to node app
-                case 2: socket.emit('coordinates', `${args[0]},${args[1]}`); break;
+                case 1: { socket.emit('cmd', args[0]); break; }// Transfer command to node app
+                case 2: { screenSize(); socket.emit('coordinates', `${args[0]},${args[1]},${vw},${vh}`); break; }
                 default: /* Placeholder */ break;
             }
         }
+
+        let vw;
+        let vh;
+        function screenSize() {
+            vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0)
+            vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0)
+            return {vw, vh};
+        }
+
+        function setTheme() {
+            const prefersLightMode = window.matchMedia('(prefers-color-scheme: light)').matches;
+            if (prefersLightMode) send('t');
+        }
+        document.addEventListener("DOMContentLoaded", setTheme);
 
         socket.on('connect', () => {
             console.log(`Connected - Session ID: ${session}`); // Obsolete
@@ -103,7 +110,8 @@
         });
 
         socket.on('screenSize', (code) => { // Transmit screenSize on request
-            socket.emit('screenSize', { width: window.innerWidth, height: window.innerHeight });
+            let { vw, vh } = screenSize();
+            socket.emit('screenSize', { width: vw, height: vh });
         });
         
     </script>
