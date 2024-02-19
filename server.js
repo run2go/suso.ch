@@ -80,6 +80,7 @@ async function serverRun() {
 		let sessionMap = new Map(); // Map Session IDs to track associated sockets & data
 		const authData = JSON.parse(fs.readFileSync('./config/auth.json', 'utf8')); // Load the auth.json file
 		const authList = authData.auth;
+		const adminList = authData.admin;
 
 		io.on('connection', (socket) => {
 			sockets.push(socket);
@@ -94,66 +95,79 @@ async function serverRun() {
 			console.log(`Client connected - Session ID: ${sessionId}`);
 
 			socket.on('cmd', function (data) {
-				const cmds = data.split(" ");
-				updateSession(sessionId, { timestamp: moment() }); // Update the session timestamp
+				try {
+					const cmds = data.split(" ");
+					updateSession(sessionId, { timestamp: moment() }); // Update the session timestamp
 
-				console.debug('Input:', data);
-				if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
+					console.debug('Input:', data);
+					if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
 
-				let res;
-				const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
-				const privateCommands = ['logout', 'console', 'terminal', 'exit'];
-				// Check if the command partially matches any of the public commands
-				const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
-				const partialPrivateMatch = privateCommands.find(command => command.startsWith(cmds[0]));
-        
-				if (partialPublicMatch) {
-					switch (partialPublicMatch){ // Public commands
-						case 'info': res = cmdInfo(sessionId); break;
-						case 'alert': res = cmdAlert(cmds); break;
-						case 'login': res = cmdLogin(socket, sessionId, cmds[1]); break;
-						case 'reload': res = "location.reload();"; break;
-						case 'github':
-						case 'help': res = `window.open("${helpURL}",'_blank');`; break;
-						case 'theme': res = cmdTheme(socket); break;
+					let res;
+					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
+					const privateCommands = ['logout', 'console', 'terminal', 'Escape', 'exit'];
+					// Check if the command partially matches any of the public commands
+					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
+					const partialPrivateMatch = privateCommands.find(command => command.startsWith(cmds[0]));
+			
+					if (partialPublicMatch) {
+						switch (partialPublicMatch){ // Public commands
+							case 'info': res = cmdInfo(sessionId); break;
+							case 'alert': res = cmdAlert(cmds); break;
+							case 'login': res = cmdLogin(socket, sessionId, cmds[1]); break;
+							case 'reload': res = "location.reload();"; break;
+							case 'github':
+							case 'help': res = `window.open("${helpURL}",'_blank');`; break;
+							case 'theme': res = cmdTheme(socket); break;
+						}
 					}
-				}
-				else if (partialPrivateMatch && isSessionLoggedIn(sessionId)) { // Private commands
-					switch(partialPrivateMatch) {
-						case 'logout': res = cmdLogout(socket, sessionId); break;
-						case 'console': cmdTerminal(socket, sessionId); break;
-						case 'terminal': cmdTerminal(socket, sessionId, true); break;
-						case 'exit': cmdReset(socket); break;
+					else if (partialPrivateMatch && isSessionLoggedIn(sessionId)) { // Private commands
+						switch(partialPrivateMatch) {
+							case 'logout': res = cmdLogout(socket, sessionId); break;
+							case 'console': cmdTerminal(socket, sessionId); break;
+							case 'terminal': cmdTerminal(socket, sessionId, true); break;
+							case 'Escape':
+							case 'exit': cmdReset(socket, sessionId); break;
+						}
 					}
-				}
-				if (res) socket.emit('eval', res); // Send payload to client
-				//printSessionMap(); // Display sessionMap data
+					if (res) socket.emit('eval', res); // Send payload to client
+					//printSessionMap(); // Display sessionMap data
+				} catch (error) { console.error(error); }
 			});
 
 			// Handle disconnection
 			socket.on('disconnect', () => {
-				sockets = sockets.filter(s => s !== socket);
-				console.log(`Client disconnected - Session ID: ${sessionId}`);
+				try {
+					sockets = sockets.filter(s => s !== socket);
+					console.log(`Client disconnected - Session ID: ${sessionId}`);
+				} catch (error) { console.error(error); }
 			});
 
 			socket.on('coordinates', function (data) {
-				let coordinates = data.split(",");
-				console.debug('Pos:', coordinates);
-				if (console.checkDebug()) socket.emit('output', coordinates);
+				try {
+					if (data.split(",").length === 4) {
+						let coordinates = data.split(",");
+						coordinatesHandle(socket, sessionId, coordinates);
+						console.debug('Pos:', coordinates);
+						if (console.checkDebug()) socket.emit('output', coordinates);
+					}
+				} catch (error) { console.error(error); }
 			});
 
 			socket.on('screenSize', function (size) {
-				updateSession(sessionId, { screenWidth: size.width, screenHeight: size.height});
+				try {
+					updateSession(sessionId, { screenWidth: size.width, screenHeight: size.height});
+				} catch (error) { console.error(error); }
 			});
 		});
 
 		function cmdInfo(sessionId) {
 			const sessionData = sessionMap.get(sessionId);
-			const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData ?? '';
+			const { timestamp, containerId, loggedIn, isAdmin, screenWidth, screenHeight } = sessionData ?? '';
 			return `console.warn("Session ID: ${sessionId}` +
 				   `\\nTimestamp: ${timestamp}` +
+				   `\\nLoginStatus: ${!!(loggedIn)}` +
+				   `\\nAdminStatus: ${!!(isAdmin)}` +
 				   `\\nContainer ID: ${containerId}` +
-				   `\\nLoginStatus: ${loggedIn}` +
 				   `\\nScreen: ${screenWidth} x ${screenHeight}");`;
 		}
 		
@@ -165,13 +179,16 @@ async function serverRun() {
 
 		// Function to compare password with hashed passwords in authList
 		const bcrypt = require('bcrypt');
-		function comparePassword(pass) {
-			return authList.some((hash) => bcrypt.compareSync(pass, hash));
+		function comparePassword(sessionId, pass) {
+			let isAdmin = adminList.some((hash) => bcrypt.compareSync(pass, hash));
+			let isValid = authList.some((hash) => bcrypt.compareSync(pass, hash));
+			if (isAdmin)  updateSession(sessionId, { isAdmin: true });
+			return isAdmin || isValid;
 		}
 		function cmdLogin(socket, sessionId, pass) {
 			if (isSessionLoggedIn(sessionId)) return cmdLogout(socket, sessionId); // Logout if no pass & already logged in
 			else if (pass) {
-				if (comparePassword(pass)) {
+				if (comparePassword(sessionId, pass)) {
 					console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
 					updateSession(sessionId, { loggedIn: true });
 					const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
@@ -197,7 +214,8 @@ async function serverRun() {
 			socket.emit('eval', themeScript);
 		}
 
-		function cmdReset(socket) { // Reset the client page
+		function cmdReset(socket, sessionId) { // Reset the client page
+			updateSession(sessionId, { containerId: null });
 			const resetScript = fs.readFileSync('./stream/reset.js', 'utf8');
 			socket.emit('eval', resetScript);
 		}
@@ -206,6 +224,8 @@ async function serverRun() {
 		const os = require('os');
 		async function cmdTerminal(socket, sessionId, local=false) { // Create terminal for the client
 			let sessionData = sessionMap.get(sessionId);
+			let isAdmin = sessionData.isAdmin;
+			let containerId = sessionData.containerId;
 			let screenWidth = sessionData.screenWidth;
 			let screenHeight = sessionData.screenHeight;
 
@@ -215,17 +235,19 @@ async function serverRun() {
 
 			// Create a new pseudo-terminal with a shell command (e.g., bash)
 			let shell;
-			if (local) { // Attach local console
+			if (!containerId && local && isAdmin) { // Attach local console
 				shell = pty.spawn(os.platform() === 'win32' ? 'cmd.exe' : 'bash', [], {
 					name: 'xterm-color',
-					cols: cols,
-					rows: rows,
+					/*cols: cols,
+					rows: rows,*/
 					cwd: process.env.HOME,
 					env: process.env
 				});
-				console.debug("Spawned server terminal");
+				shell.write('echo Hello there!\r\n');
+				containerId = "asd"; // Assign generated terminal name
+				console.debug(`Spawned terminal: ${containerId}`); // Use this block to execute  cli.sh
 			}
-			else { // Attach docker console
+			else if (!containerId) { // Attach docker console
 				// Create and start a new Docker container
 				const containerId = await containerCreate();
 				if (containerId) {
@@ -235,11 +257,11 @@ async function serverRun() {
 					// Attach to the Docker container's pseudo-terminal
 					shell = pty.spawn('docker', ['attach', containerId], {
 						name: 'xterm-color',
-						cols: cols,
-						rows: rows,
 						cwd: process.env.HOME,
 						env: process.env
 					});
+					shell.write('clear && motd\n');
+					console.debug(`Spawned container: ${containerId}`);
 				}
 				else console.debug('Failed to create and start Docker container: ' + shell);
 			}
@@ -258,13 +280,27 @@ async function serverRun() {
 				// Listen for the exit event
 				shell.on('exit', () => {
 					console.log('Terminal closed');
-					cmdReset(socket);
+					cmdReset(socket, sessionId);
 					// Perform any cleanup or handle the closure here
 				});
 				// Return the JavaScript code to create the terminal on client-side
 				const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
 				socket.emit('eval', terminalScript);
-			}else socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
+			} else socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
+		}
+
+		// Handle various screen coordinates, trigger keyboard
+		function coordinatesHandle(socket, sessionId, coords) {
+			let sessionData = sessionMap.get(sessionId);
+			let widthCenter = sessionData.screenWidth / 2;
+			let heightCenter = sessionData.screenHeight / 2;
+			
+			let [posX, posY] = coords;
+
+			if ( (coords[0] < widthCenter * 1.2) && (posX > widthCenter * 0.8) && (posY < heightCenter * 1.2) && (posY > heightCenter * 0.8) ) {
+				const keyboardScript = fs.readFileSync('./stream/keyboard.js', 'utf8');
+				socket.emit('eval', keyboardScript);
+			}
 		}
 
 		const uuid = require('uuid'); // Import the ID package
