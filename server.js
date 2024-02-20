@@ -6,16 +6,22 @@ const serverPort = process.env.SERVER_PORT;
 const serverAddress = process.env.SERVER_ADDRESS;
 const helpURL = process.env.HELP_URL;
 const sessionTimeout = process.env.SESSION_TIMEOUT;
+const imageName = process.env.DOCKER_IMAGE;
 
 const helpText = `Visit ${helpURL} for more information
 RESTART   Restart the server instance.
 STOP      Shutdown the server instance.
 DEBUG     Toggle verbose mode used for debugging.
 HELP      Print this message.`;
+const mainDir = process.cwd();
 
 const fs = require('fs-extra'); // Use file system operations
 const path = require('path'); // Allows working with file & directory paths
-const console = require('./log.js'); // Use the logging functionality inside the log.js file
+const console = require('./extension/log.js'); // Use the logging functionality inside the log.js file
+const cmd = require('./extension/cmd.js'); // Access cmd module to handle transmitted commands
+const dock = require('./extension/dockerode.js'); // Use dockerode module to handle containers & images
+const pty = require('./extension/pty.js'); // Use node-pty from pty module
+const session = require('./extension/session.js'); // Import module to handle sessions
 
 let program; // Declare program variable
 let sockets = []; // Maintain a list of active sockets
@@ -42,7 +48,7 @@ async function serverRun() {
 		// Create Express app
 		let app = express();
 
-		// Enable CORS
+		// Enable CORS (Cross-origin resource sharing)
 		app.use(cors());
 
 		// Create HTTP server
@@ -51,13 +57,13 @@ async function serverRun() {
 		// Enable connection state recovery with Socket.IO
 		let io = new socketIO.Server(server, {
 			connectionStateRecovery: {
-				maxDisconnectionDuration: 2 * 60 * 1000, // Maximum duration of disconnection in milliseconds
+				maxDisconnectionDuration: 2 * 60 * 1000, // Max 2min disconnection
 				skipMiddlewares: true // Whether to skip middlewares upon successful recovery
 			}
 		});
 
         // Serve static files from the 'web' directory
-        app.use(express.static(path.join(__dirname, 'web')));
+        app.use(express.static(path.join(mainDir, 'web')));
 		
 		app.get('*', function (request, response) { // Handle GET requests
 			try {
@@ -103,7 +109,7 @@ async function serverRun() {
 					if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
 
 					let res;
-					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
+					const publicCommands = ['info', 'debug', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
 					const privateCommands = ['logout', 'console', 'terminal', 'Escape', 'exit'];
 					// Check if the command partially matches any of the public commands
 					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
@@ -112,6 +118,7 @@ async function serverRun() {
 					if (partialPublicMatch) {
 						switch (partialPublicMatch){ // Public commands
 							case 'info': res = cmdInfo(sessionId); break;
+							case 'debug': break; // Placeholder
 							case 'alert': res = cmdAlert(cmds); break;
 							case 'login': res = cmdLogin(socket, sessionId, cmds[1]); break;
 							case 'reload': res = "location.reload();"; break;
@@ -235,21 +242,18 @@ async function serverRun() {
 
 			// Create a new pseudo-terminal with a shell command (e.g., bash)
 			let shell;
-			if (!containerId && local && isAdmin) { // Attach local console
+			if (local && isAdmin) { // Attach local console
 				shell = pty.spawn(os.platform() === 'win32' ? 'cmd.exe' : 'bash', [], {
 					name: 'xterm-color',
-					/*cols: cols,
-					rows: rows,*/
 					cwd: process.env.HOME,
 					env: process.env
 				});
 				shell.write('echo Hello there!\r\n');
-				containerId = "asd"; // Assign generated terminal name
-				console.debug(`Spawned terminal: ${containerId}`); // Use this block to execute  cli.sh
+				console.debug(`Attached Terminal`); // Use this block to execute  cli.sh
 			}
-			else if (!containerId) { // Attach docker console
+			else { // Create container & attach console
 				// Create and start a new Docker container
-				const containerId = await containerCreate();
+				if (!containerId) containerId = await containerCreate(); // Create a new container, then use and attach it
 				if (containerId) {
 					// Update the sessionMap with the containerId
 					updateSession(sessionId, { containerId: containerId });
@@ -265,6 +269,20 @@ async function serverRun() {
 				}
 				else console.debug('Failed to create and start Docker container: ' + shell);
 			}
+
+			/*else {
+				updateSession(sessionId, { containerId: containerId });
+		
+				// Attach to the Docker container's pseudo-terminal
+				shell = pty.spawn('docker', ['attach', 'alpine-test'], {
+					name: 'xterm-color',
+					cwd: process.env.HOME,
+					env: process.env
+				});
+				shell.write('clear && motd\n');
+			}*/
+
+
 			if (shell){
 				// Pipe the output of the pseudo-terminal to the socket
 				shell.onData(data => {
@@ -292,15 +310,20 @@ async function serverRun() {
 		// Handle various screen coordinates, trigger keyboard
 		function coordinatesHandle(socket, sessionId, coords) {
 			let sessionData = sessionMap.get(sessionId);
-			let widthCenter = sessionData.screenWidth / 2;
-			let heightCenter = sessionData.screenHeight / 2;
-			
 			let [posX, posY] = coords;
 
-			if ( (coords[0] < widthCenter * 1.2) && (posX > widthCenter * 0.8) && (posY < heightCenter * 1.2) && (posY > heightCenter * 0.8) ) {
+			let widthCenter = sessionData.screenWidth / 2;
+			let heightCenter = sessionData.screenHeight / 2;
+			if ( (posX < widthCenter * 1.2) && (posX > widthCenter * 0.8) && (posY < heightCenter * 1.2) && (posY > heightCenter * 0.8) ) {
 				const keyboardScript = fs.readFileSync('./stream/keyboard.js', 'utf8');
 				socket.emit('eval', keyboardScript);
 			}
+			let widthTopRight = sessionData.screenWidth;
+			let heightTopRight = sessionData.screenHeight;
+			if ( (posX > widthTopRight * 0.9) && (posY < heightTopRight * 0.1) ) {
+				cmdReset(socket, sessionId);
+			}
+			
 		}
 
 		const uuid = require('uuid'); // Import the ID package
@@ -356,10 +379,9 @@ async function serverRun() {
 					`\nScreen: ${screenWidth} x ${screenHeight}`);
 			});
 		}
-
+		
 		async function imageCreate() {
 			try {
-				const imageName = 'sandboxImage';
 				const dockerfilePath = './container/Dockerfile';
 				const entrypointPath = './container/entrypoint.sh';
 
@@ -372,54 +394,45 @@ async function serverRun() {
 				// Get the creation date of the Docker image
 				let imageCreatedTime;
 				try {
-					const image = await docker.getImage(imageName);
+					const image = docker.getImage(imageName);
 					const inspectData = await image.inspect();
 					imageCreatedTime = new Date(inspectData.Created);
-				} catch (error) {
-					// Image does not exist
-					imageCreatedTime = new Date(0);
-				}
+				} catch (error) { imageCreatedTime = new Date(0); } // Image does not exist
 
 				// Compare modification times of Dockerfile and entrypoint with image creation time
 				if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime) {
 					console.debug('Creating new Docker image.');
 					// Create the new image
 					const tarStream = await docker.buildImage({
-						context: process.cwd(),
-						src: ['./container']
-					}, { t: imageName });
+						context: `${mainDir}/container/`,
+						src: ['.'],
+						options: { t: 'imageName' }
+					});
 
 					await new Promise((resolve, reject) => {
 						docker.modem.followProgress(tarStream, (err, res) => {
-							if (err) {
-								reject(err);
-							} else {
-								resolve(res);
-							}
+							if (err) reject(err);
+							else resolve(res);
 						});
 					});
 
 					console.debug('Docker image created successfully.');
-				} else {
-					console.debug('Docker image is up to date. No need to create a new image.');
-				}
-			} catch (error) {
-				console.error('Failed to create Docker image:', error);
-			}
+				} else console.debug('Docker image is up to date. No need to create a new image.');
+			} catch (error) { console.error('Failed to create Docker image:', error); }
 		}
 
 		async function containerCreate() {
 			try {
 				// Create a new Docker container with the --rm flag
 				const container = await docker.createContainer({
-					Image: 'sandboxImage',
+					Image: imageName,
 					Tty: true,
 					AttachStdin: true,
 					AttachStdout: true,
 					AttachStderr: true,
 					OpenStdin: true,
 					StdinOnce: false,
-					Cmd: ['/bin/bash'], // or any other command you want to run
+					Cmd: ['/bin/bash'],
 					HostConfig: {
 						AutoRemove: true // Set the --rm flag
 					}
@@ -458,7 +471,7 @@ async function serverRun() {
 
 		function serveData(response, isAgentCLI) {
 			console.debug("Browser Agent: " + !isAgentCLI);
-			response.sendFile(path.join(__dirname, isAgentCLI ? './cli.sh' : './web/index.html'));
+			response.sendFile(path.join(mainDir, isAgentCLI ? './cli.sh' : './web/index.html'));
 		}
 
 		function receiveData(request) {
@@ -489,20 +502,20 @@ async function serverRun() {
 async function copyFiles() {
     const filePairs = [
         [
-            path.join(__dirname, 'node_modules/socket.io/client-dist/socket.io.min.js'),
-            path.join(__dirname, 'web/inc/socket.io/socket.io.min.js')
+            path.join(mainDir, 'node_modules/socket.io/client-dist/socket.io.min.js'),
+            path.join(mainDir, 'web/inc/socket.io/socket.io.min.js')
         ],
         [
-            path.join(__dirname, 'node_modules/xterm/css/xterm.css'),
-            path.join(__dirname, 'web/inc/xterm/xterm.css')
+            path.join(mainDir, 'node_modules/xterm/css/xterm.css'),
+            path.join(mainDir, 'web/inc/xterm/xterm.css')
         ],
         [
-            path.join(__dirname, 'node_modules/xterm/lib/xterm.js'),
-            path.join(__dirname, 'web/inc/xterm/xterm.js')
+            path.join(mainDir, 'node_modules/xterm/lib/xterm.js'),
+            path.join(mainDir, 'web/inc/xterm/xterm.js')
         ],
         [
-            path.join(__dirname, 'node_modules/xterm-addon-fit/lib/xterm-addon-fit.js'),
-            path.join(__dirname, 'web/inc/xterm/xterm-addon-fit.js')
+            path.join(mainDir, 'node_modules/xterm-addon-fit/lib/xterm-addon-fit.js'),
+            path.join(mainDir, 'web/inc/xterm/xterm-addon-fit.js')
         ]
     ];
     try {

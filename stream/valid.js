@@ -6,4 +6,4 @@ logo.style.width = '30%';
 logo.style.height = '30%';
 logo.style.opacity = '100%';
 logo.style.filter = 'drop-shadow(0 0 8px #fff)';
-setTimeout(() => { logo.style.filter = 'none'; }, 200);
+setTimeout(() => { logo.style.filter = 'none'; }, 500);
