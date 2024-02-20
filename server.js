@@ -15,7 +15,11 @@ HELP      Print this message.`;
 
 const fs = require('fs-extra'); // Use file system operations
 const path = require('path'); // Allows working with file & directory paths
-const console = require('./log.js'); // Use the logging functionality inside the log.js file
+const console = require('./extension/log.js'); // Use the logging functionality inside the log.js file
+const cmd = require('./extension/cmd.js'); // Access cmd module to handle transmitted commands
+const dock = require('./extension/dockerode.js'); // Use dockerode module to handle containers & images
+const pty = require('./extension/pty.js'); // Use node-pty from pty module
+const session = require('./extension/session.js'); // Import module to handle sessions
 
 let program; // Declare program variable
 let sockets = []; // Maintain a list of active sockets
@@ -103,7 +107,7 @@ async function serverRun() {
 					if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
 
 					let res;
-					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
+					const publicCommands = ['info', 'debug', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
 					const privateCommands = ['logout', 'console', 'terminal', 'Escape', 'exit'];
 					// Check if the command partially matches any of the public commands
 					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
@@ -112,6 +116,7 @@ async function serverRun() {
 					if (partialPublicMatch) {
 						switch (partialPublicMatch){ // Public commands
 							case 'info': res = cmdInfo(sessionId); break;
+							case 'debug': break; // Placeholder
 							case 'alert': res = cmdAlert(cmds); break;
 							case 'login': res = cmdLogin(socket, sessionId, cmds[1]); break;
 							case 'reload': res = "location.reload();"; break;
@@ -359,7 +364,7 @@ async function serverRun() {
 
 		async function imageCreate() {
 			try {
-				const imageName = 'sandboxImage';
+				const imageName = 'sandbox_image';
 				const dockerfilePath = './container/Dockerfile';
 				const entrypointPath = './container/entrypoint.sh';
 
@@ -375,10 +380,7 @@ async function serverRun() {
 					const image = await docker.getImage(imageName);
 					const inspectData = await image.inspect();
 					imageCreatedTime = new Date(inspectData.Created);
-				} catch (error) {
-					// Image does not exist
-					imageCreatedTime = new Date(0);
-				}
+				} catch (error) { imageCreatedTime = new Date(0); } // Image does not exist
 
 				// Compare modification times of Dockerfile and entrypoint with image creation time
 				if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime) {
@@ -391,21 +393,14 @@ async function serverRun() {
 
 					await new Promise((resolve, reject) => {
 						docker.modem.followProgress(tarStream, (err, res) => {
-							if (err) {
-								reject(err);
-							} else {
-								resolve(res);
-							}
+							if (err) reject(err);
+							else resolve(res);
 						});
 					});
 
 					console.debug('Docker image created successfully.');
-				} else {
-					console.debug('Docker image is up to date. No need to create a new image.');
-				}
-			} catch (error) {
-				console.error('Failed to create Docker image:', error);
-			}
+				} else console.debug('Docker image is up to date. No need to create a new image.');
+			} catch (error) { console.error('Failed to create Docker image:', error); }
 		}
 
 		async function containerCreate() {
