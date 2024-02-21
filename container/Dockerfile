@@ -5,7 +5,7 @@ FROM alpine:latest
 RUN echo "" > /etc/motd && echo "" > /etc/issue
 
 # Install packages
-RUN apk --no-cache add docker net-tools curl
+RUN apk --no-cache add docker net-tools curl htop
 
 # Download the latest cloudflared binary
 RUN wget -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
