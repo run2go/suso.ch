@@ -33,7 +33,9 @@ async function serverRun() {
 		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
 
 		await utility.copyFiles(path, mainDir); // Prepare Socket.io and Xterm.js client files
-		await dock.imageCreate(); // Create Docker image if outdated
+		//await dock.imageCreate(); // Create Docker image if outdated
+		//docker rm $(docker ps -aq)
+		//docker rmi $(docker images -q)
 		
 		let app = express(); // Create main app using express framework
 		app.use(cors()); // Enable CORS (Cross-origin resource sharing)
@@ -61,10 +63,9 @@ async function serverRun() {
 				skipMiddlewares: true // Whether to skip middlewares upon successful recovery
 			}
 		});
-			
+		
 		server = http.Server(app);
 		io = socketIO(server);
-
 
 		io.on('connection', (socket) => {
 			sockets.push(socket);
@@ -74,6 +75,7 @@ async function serverRun() {
 			if (!session.isValid(sessionId)) { // If provided UUID is invalid,
 				sessionId = session.create(); // Generate new sessionId
 				session.map.set(sessionId); // Add new map entry
+				session.update(sessionId, {sessionIp: sessionIp});
 				socket.emit('sessionId', sessionId); // Assign sessionId
 				socket.emit('screenSize'); // Request screen data
 			}
@@ -86,7 +88,7 @@ async function serverRun() {
 					session.update(sessionId, { timestamp: moment() }); // Update the session timestamp
 
 					console.debug('Input:', data);
-					if (console.checkDebug()) socket.emit('output', cmds); // Echo received commands back
+					if (session.isDebug(sessionId)) socket.emit('output', cmds); // Echo received commands back
 
 					let res;
 					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
@@ -109,18 +111,18 @@ async function serverRun() {
 							case 'theme': res = cmd.theme(socket); break;
 						}
 					}
-					else if (partialPrivateMatch && isLoggedIn && isAdmin) { // Admin commands
-						switch(partialPrivateMatch) {
-							case 'terminal': cmd.terminal(socket, sessionId, true); break;
-							case 'debug': res = cmd.debug(socket, sessionId); break;
-						}
-					}
 					else if (partialPrivateMatch && isLoggedIn) { // Private commands
 						switch(partialPrivateMatch) {
 							case 'logout': res = cmd.logout(socket, sessionId); break;
 							case 'console': cmd.terminal(socket, sessionId); break;
+							case 'debug': res = cmd.debug(socket, sessionId); break;
 							case 'Escape':
 							case 'exit': cmd.reset(socket, sessionId); break;
+						}
+					}
+					else if (partialPrivateMatch && isLoggedIn && isAdmin) { // Admin commands
+						switch(partialPrivateMatch) {
+							case 'terminal': cmd.terminal(socket, sessionId, true); break;
 						}
 					}
 					if (res) socket.emit('eval', res); // Send payload to client
@@ -142,7 +144,7 @@ async function serverRun() {
 						let pos = data.split(",");
 						coordinates.handle(socket, sessionId, pos);
 						console.debug('Pos:', pos);
-						if (console.checkDebug()) socket.emit('output', pos);
+						if (session.isDebug(sessionId)) socket.emit('output', pos);
 					}
 				} catch (error) { console.error(error); }
 			});
@@ -179,6 +181,7 @@ async function serverRun() {
 				case 'stop': serverShutdown(server); break;
 				case 'debug': console.log(`Debug Status: ${console.toggleDebug()}`); break;
 				case 'help': console.log(helpText); break;
+				case 'print': session.printMap(); break;
 				case '': break; // Handle empty cmds (e.g. just 'Enter')
 				default: console.log(`Unknown command`);
 			}
