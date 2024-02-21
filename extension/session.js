@@ -15,10 +15,13 @@ const authList = authData.auth;
 const adminList = authData.admin;
 
 // Function to get access map variables
-function read(sessionId, data = false) {
+function read(sessionId, keys) {
     const sessionData = map.get(sessionId);
-    if (!data) return sessionData; // Return everything
-    else return sessionData ? sessionData[data] : undefined; // Return requested entries
+    const result = {};
+    keys.forEach(key => {
+        result[key] = sessionData ? sessionData[key] : undefined;
+    });
+    return result;
 }
 
 // Function to update the map while making sure to maintain existing values.
@@ -40,12 +43,17 @@ function isValid(sessionId) {
 
 // Function to check if a session is logged in
 function isLoggedIn(sessionId) {
-    return !!(map.get(sessionId).loggedIn);
+    return !!(map.get(sessionId).isLoggedIn);
 }
 
-// Functio to check if the active session is an admin session
+// Function to check if the active session is an admin session
 function isAdmin(sessionId) {
     return !!(map.get(sessionId).isAdmin);
+}
+
+// Function to check if the debug mode is enabled
+function isDebug(sessionId) {
+    return !!(map.get(sessionId).isDebug);
 }
 
 // Function to compare password with hashed passwords in authList
@@ -62,12 +70,15 @@ function printMap() {
     console.debug(`Session Map Data, total entries '${map.size}':`);
     map.forEach((value, key) => {
         const sessionData = map.get(key);
-        const { timestamp, containerId, loggedIn, screenWidth, screenHeight } = sessionData ?? '';
-        console.debug(`Session ID: ${key}` +
-            `\nTimestamp: ${timestamp}` +
-            `\nContainer ID: ${containerId}` +
-            `\nLoginStatus: ${loggedIn}` +
-            `\nScreen: ${screenWidth} x ${screenHeight}`);
+        const { timestamp, sessionIp, containerId, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight } = sessionData ?? '';
+        console.debug(`Session ID: ${key}\n` +
+                      `Session IP: ${sessionIp}\n` +
+                      `Container ID: ${containerId}\n` +
+                      `Timestamp: ${timestamp}\n` +
+                      `DebugStatus: ${isDebug}\n` +
+                      `LoginStatus: ${isLoggedIn}\n` +
+                      `AdminStatus: ${isAdmin}\n` +
+                      `Screen: ${screenWidth} x ${screenHeight}`);
     });
 }
 
@@ -94,6 +105,7 @@ module.exports = {
     isValid,
     isLoggedIn,
     isAdmin,
+    isDebug,
     comparePassword,
     printMap,
     removeExpired,
