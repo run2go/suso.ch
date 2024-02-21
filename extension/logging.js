@@ -1,4 +1,4 @@
-// log.js
+// extension/log.js
 
 // Access parameters in the config.ini file
 require('dotenv').config({ path: 'config.cfg' });
@@ -6,8 +6,7 @@ const logFilePath = process.env.LOGFILE_PATH;
 const loggingEnabled = (process.env.LOGGING_ENABLED === "true");
 let debugEnabled = (process.env.DEBUG_ENABLED === "true");
 
-// Use the file system library to write to the logfile
-const fs = require('fs');
+const fs = require('fs'); // Use the file system library to write to the logfile
 
 // Check the current debug bool
 function checkDebug() {

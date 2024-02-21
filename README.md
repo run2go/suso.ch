@@ -5,7 +5,7 @@
 Makes use of Express.js with Socket.io as WebApp Framework, node-pty along with xterm.js for terminals and dockerode to dynamically control docker containers.
 
 ## Tech
-GateKeeper makes use of the following tools & software:
+suso.ch makes use of the following tools & software:
 
 - [Node.js] (JavaScript Runtime Environment)
 - [Express.js] (Node.js Webserver Framework)
