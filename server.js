@@ -17,7 +17,6 @@ const path = require('path'); // Allows working with file & directory paths
 const utility = require('./extension/utility.js'); // Require utility extension
 const console = require('./extension/logging.js'); // Use the logging functionality inside the logging.js file
 const cmd = require('./extension/cmd.js'); // Access cmd module to handle transmitted commands
-const dock = require('./extension/dockerode.js'); // Use dockerode module to handle containers & images
 const session = require('./extension/session.js'); // Import module to handle sessions
 const coordinates = require('./extension/coordinates.js'); // Import module to handle sessions
 
@@ -70,12 +69,10 @@ async function serverRun() {
 		io.on('connection', (socket) => {
 			sockets.push(socket);
 			let sessionId = socket.handshake.query.sessionId;
-			//let sessionIp = socket.handshake.address;
-			let sessionIp = socket.handshake.headers["x-forwarded-for" || ""].split(",")[0];
+			let sessionIp = socket.handshake.headers["x-forwarded-for"] || socket.handshake.address;
 			// Generate client UUID if missing or invalid
 			if (!session.isValid(sessionId)) { // If provided UUID is invalid,
 				sessionId = session.create(); // Generate new sessionId
-				session.map.set(sessionId); // Add new map entry
 				session.update(sessionId, {sessionIp: sessionIp});
 				socket.emit('sessionId', sessionId); // Assign sessionId
 				socket.emit('screenSize'); // Request screen data
@@ -93,12 +90,12 @@ async function serverRun() {
 
 					let res;
 					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
-					const privateCommands = ['logout', 'console', 'Escape', 'exit', 'debug'];
+					const privateCommands = ['logout', 'console', 'escape', 'exit', 'debug'];
 					const adminCommands = ['terminal'];
 					// Check if the command partially matches any of the public commands
-					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
-					const partialPrivateMatch = privateCommands.find(command => command.startsWith(cmds[0]));
-					const partialAdminMatch = adminCommands.find(command => command.startsWith(cmds[0]));
+					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0].toLowerCase()));
+					const partialPrivateMatch = privateCommands.find(command => command.startsWith(cmds[0].toLowerCase()));
+					const partialAdminMatch = adminCommands.find(command => command.startsWith(cmds[0].toLowerCase()));
 
 					const isLoggedIn = session.isLoggedIn(sessionId);
 					const isAdmin = session.isAdmin(sessionId);
@@ -118,8 +115,8 @@ async function serverRun() {
 						switch(partialPrivateMatch) {
 							case 'logout': res = cmd.logout(socket, sessionId); break;
 							case 'console': cmd.terminal(socket, sessionId); break;
-							case 'debug': res = cmd.debug(socket, sessionId); break;
-							case 'Escape':
+							case 'debug': res = cmd.debug(sessionId); break;
+							case 'escape':
 							case 'exit': cmd.reset(socket, sessionId); break;
 						}
 					}
