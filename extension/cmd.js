@@ -1,9 +1,11 @@
 // extension/cmd.js
 
+const os = require('os');
+const pty = require('node-pty');
+const fs = require('fs-extra');
 const console = require('./logging.js');
 const session = require('./session.js');
-const term = require('./terminal.js'); // Use node-pty from pty module
-const fs = require('fs-extra'); // Use file system operations
+const dock = require('./dockerode.js');
 
 function info(sessionId) {
     const sessionData = session.map.get(sessionId);
@@ -61,23 +63,43 @@ function reset(socket, sessionId) { // Reset the client page
     socket.emit('eval', resetScript);
 }
 
-function debug(socket, sessionId) {
-    let newDebugBool = !(session.isDebug(sessionId));
+function debug(sessionId) {
+    const newDebugBool = !session.isDebug(sessionId);
     session.update(sessionId, { isDebug: newDebugBool });
     return `console.warn("Debugging ${newDebugBool ? 'enabled' : 'disabled'}");`;
 }
 
-const os = require('os');
 async function terminal(socket, sessionId, local = false) { // Create terminal for the client
-    let containerId = session.read(sessionId, ['containerId']);
+    let {containerId, screenWidth, screenHeight} = session.read(sessionId, ['containerId', 'screenWidth', 'screenHeight']);
 
+    // Use the stored screen size information to calculate cols and rows
+    const cols = Math.floor(screenWidth / 8); // Character width of 8px
+    const rows = Math.floor(screenHeight / 16); // Character height of 16px
+
+    process.env['TERM'] = 'xterm-256color';
     let shell;
-    if (local) {
+    if (local) { // Create local terminal
         const isWin32 = !!(os.platform() === 'win32');
-        shell = term.spawn(isWin32 ? 'cmd.exe' : 'bash', []);
-        shell.write(isWin32 ? 'cmd\r' : 'clear && echo Hello!\n');
-    } else if (!!(containerId)) {
-        shell = term.spawn('docker', ['attach', containerId]);
+        shell = pty.spawn(isWin32 ? 'cmd.exe' : 'bash', [], {
+            name: 'xterm-color',
+            cols: cols,
+            rows: rows,
+            cwd: process.env.HOME,
+            env: process.env
+        });
+        shell.write(isWin32 ? 'echo Hello!\r\n' : 'clear && echo Hello!\n');
+    }
+    else if (!containerId) { // Create new container
+        containerId = await dock.containerCreate();
+    }
+    else if (containerId) { // Attach container console
+        shell = pty.spawn('docker', ['attach', `${containerId}`], {
+            name: 'xterm-color',
+            cols: cols,
+            rows: rows,
+            cwd: process.env.HOME,
+            env: process.env
+        });
         shell.write('clear && motd\n');
     }
 
@@ -95,13 +117,14 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
 
         // Listen for the exit event
         shell.on('exit', () => {
-            console.log('Terminal closed');
+            console.info(`Terminal "${containerId || 'local'}" closed from ${sessionId}`);
+            shell.kill();
             reset(socket, sessionId);
         });
         // Return the JavaScript code to create the terminal on client-side
         const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
         socket.emit('eval', terminalScript);
-        console.debug(`Attached Terminal to  - ${sessionId}`);
+        console.info(`Attached Terminal "${containerId || 'local'}" to ${sessionId}`);
     } else socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
 }
 

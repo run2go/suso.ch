@@ -33,7 +33,10 @@ function update(sessionId, newData) {
 
 // Function to generate UUIDs as session IDs
 function create() {
-    return uuid.v4();
+    sessionId = uuid.v4();
+    map.set(sessionId);
+    update(sessionId, {sessionIp: null, containerId: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: null});
+    return sessionId;
 }
 
 // Function to validate session UUIDs
@@ -70,15 +73,15 @@ function printMap() {
     console.debug(`Session Map Data, total entries '${map.size}':`);
     map.forEach((value, key) => {
         const sessionData = map.get(key);
-        const { timestamp, sessionIp, containerId, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight } = sessionData ?? '';
+        const { sessionIp, containerId, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight, timestamp } = sessionData ?? '';
         console.debug(`Session ID: ${key}\n` +
                       `Session IP: ${sessionIp}\n` +
                       `Container ID: ${containerId}\n` +
-                      `Timestamp: ${timestamp}\n` +
                       `DebugStatus: ${isDebug}\n` +
                       `LoginStatus: ${isLoggedIn}\n` +
                       `AdminStatus: ${isAdmin}\n` +
-                      `Screen: ${screenWidth} x ${screenHeight}`);
+                      `Screen: ${screenWidth} x ${screenHeight}\n` +
+                      `Timestamp: ${timestamp}`);
     });
 }
 

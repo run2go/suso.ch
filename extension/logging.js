@@ -33,6 +33,7 @@ function getTimestamp() {
 
 // Save the original console functions
 const originalConsoleLog = console.log;
+const originalConsoleInfo = console.info;
 const originalConsoleWarn = console.warn;
 const originalConsoleError = console.error;
 const originalConsoleDebug = console.debug;
@@ -44,6 +45,13 @@ function log(...args) {
 
     originalConsoleLog(logMessage);
     if (loggingEnabled) { fs.appendFileSync(logFilePath, logMessage + '\n'); }
+}
+function info(...args) {
+	const formattedDate = getTimestamp();
+    const infoMessage = `[${formattedDate}] [INFO] ${args[0]} ${args.slice(1).join(' ')}`;
+
+    originalConsoleInfo(infoMessage);
+    if (loggingEnabled) { fs.appendFileSync(logFilePath, infoMessage + '\n'); }
 }
 function warn(...args) {
 	const formattedDate = getTimestamp();
