@@ -70,7 +70,8 @@ async function serverRun() {
 		io.on('connection', (socket) => {
 			sockets.push(socket);
 			let sessionId = socket.handshake.query.sessionId;
-			let sessionIp = socket.handshake.address;
+			//let sessionIp = socket.handshake.address;
+			let sessionIp = socket.handshake.headers["x-forwarded-for" || ""].split(",")[0];
 			// Generate client UUID if missing or invalid
 			if (!session.isValid(sessionId)) { // If provided UUID is invalid,
 				sessionId = session.create(); // Generate new sessionId
@@ -92,10 +93,12 @@ async function serverRun() {
 
 					let res;
 					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
-					const privateCommands = ['logout', 'console', 'terminal', 'Escape', 'exit', 'debug'];
+					const privateCommands = ['logout', 'console', 'Escape', 'exit', 'debug'];
+					const adminCommands = ['terminal'];
 					// Check if the command partially matches any of the public commands
 					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0]));
 					const partialPrivateMatch = privateCommands.find(command => command.startsWith(cmds[0]));
+					const partialAdminMatch = adminCommands.find(command => command.startsWith(cmds[0]));
 
 					const isLoggedIn = session.isLoggedIn(sessionId);
 					const isAdmin = session.isAdmin(sessionId);
@@ -120,8 +123,8 @@ async function serverRun() {
 							case 'exit': cmd.reset(socket, sessionId); break;
 						}
 					}
-					else if (partialPrivateMatch && isLoggedIn && isAdmin) { // Admin commands
-						switch(partialPrivateMatch) {
+					else if (partialAdminMatch && isLoggedIn && isAdmin) { // Admin commands
+						switch(partialAdminMatch) {
 							case 'terminal': cmd.terminal(socket, sessionId, true); break;
 						}
 					}
