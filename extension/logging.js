@@ -17,8 +17,6 @@ function getTimestamp() {
     return new Date().toISOString(); // Using ISO format for simplicity
 }
 
-const { log, info, warn, error, debug } = console;
-
 function logWithTimestamp(level, ...args) {
     const formattedDate = getTimestamp();
     let logMessage = `[${formattedDate}]`;
