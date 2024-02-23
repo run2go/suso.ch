@@ -7,12 +7,12 @@ const fs = require('fs-extra');
 // Handle various screen coordinates, trigger keyboard
 function handle(socket, sessionId, coords) {
     const [posX, posY, width, height] = coords; // Deconstruct coords array
-    const {screenWidth, screenHeight, terminalId} = session.read(sessionId, ['screenWidth', 'screenHeight', 'terminalId']); // Extract stored screen size
+    const {screenWidth, screenHeight, containerName} = session.read(sessionId, ['screenWidth', 'screenHeight', 'containerName']); // Extract stored screen size
     if (width != screenWidth || height != screenHeight) { // Update screen size if changed
         session.update(sessionId, {screenWidth: width, screenHeight: height}); 
     }
 
-    if (!terminalId) {
+    if (containerName) {
         // Handle interactions near the center
         const widthCenter = screenWidth / 2;
         const heightCenter = screenHeight / 2;
