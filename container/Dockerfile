@@ -5,22 +5,22 @@ FROM alpine:latest
 RUN echo "" > /etc/motd && echo "" > /etc/issue
 
 # Install packages
-RUN apk --no-cache add docker net-tools curl htop
+RUN apk --no-cache add openrc procps nano curl htop net-tools docker
 
-# Download the latest cloudflared binary
-RUN wget -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+# Download the latest cloudflared binary & set execution permissions
+RUN wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+RUN chmod +x /usr/local/bin/cloudflared
 
-# Download the ufetch-alpine script and save it as splash.sh
-RUN wget -L https://gitlab.com/jschx/ufetch/-/raw/main/ufetch-alpine -O /usr/local/bin/splash.sh
+# Copy the entrypoint.sh & splash.sh script into the container
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY splash.sh /usr/local/bin/splash.sh
 
-# Set execute permissions on the splash.sh script
+# Set execute permissions on the entrypoint.sh & splash.sh script
+RUN chmod +x /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/splash.sh
 
-# Copy the entrypoint script into the container
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-
-# Set execute permissions on the entrypoint script
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Define shell
+CMD ["/bin/ash"]
 
 # Set the entrypoint of the container
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

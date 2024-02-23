@@ -1,28 +1,25 @@
 #!/bin/sh
 
-# Run splash.sh to replace & update motd
-/usr/local/bin/splash.sh > /etc/motd
+# Assign $1 to tunnel_port if provided, otherwise use "80"
+tunnel_port="${1:-80}"
 
-# Append a line break to motd
-echo "" >> /etc/motd
+# Define the log file path
+log_file="/var/log/cloudflared.log"
 
-# Start cloudflared service in the background
-/usr/local/bin/cloudflared cloudflared tunnel --no-autoupdate --url http://localhost:80 &
+# Remove the existing log file
+rm -f "$log_file"
 
-# Wait for cloudflared to output the trycloudflare.com subdomain and append it to motd
-while true; do
-    # Get the process ID (PID) of the cloudflared process
-    PID=$(pgrep -f "cloudflared tunnel --no-autoupdate --url http://localhost:80")
-    if [ -n "$PID" ]; then
-        # Extract the subdomain from the cloudflared command line arguments
-        DOMAIN=$(cat /proc/$PID/cmdline | tr '\0' '\n' | grep -oh "https://\(.*\)trycloudflare.com")
-        if [ -n "$DOMAIN" ]; then
-            echo "Quick tunnel accessible via: $DOMAIN" >> /etc/motd
-            break
-        fi
-    fi
-    sleep 1
-done
+# Create an empty log file
+touch "$log_file"
+
+# Stop any running cloudflared processes
+#pkill cloudflared
+
+# Start cloudflared service in the background and redirect its output to a log file
+/usr/local/bin/cloudflared tunnel --no-autoupdate --url "http://localhost:$tunnel_port" >> "$log_file" 2>&1 &
+
+# Run splash.sh to replace /etc/motd and pass the log file path as an argument
+/usr/local/bin/splash.sh "$log_file" "$tunnel_port" >> /etc/motd &
 
 # Execute the commands passed to the container
-exec "$@"
+exec /bin/ash

@@ -32,9 +32,9 @@ async function copyFiles(path, directory) {
             if (srcStat.mtime > destStat.mtime) {
                 await fs.ensureDir(path.dirname(dest));
                 await fs.copyFile(src, dest);
-                console.debug(`Copied ${src} to ${dest}`);
+                console.debug(`Copied "${src}" to "${dest}"`);
             } else {
-                console.debug(`File ${src} is up to date. No need to copy.`);
+                console.debug(`File "${src}" is up to date.`);
             }
         }
     } catch (error) {

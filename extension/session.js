@@ -3,6 +3,7 @@
 
 require('dotenv').config({ path: './config/config.cfg' }); // Access parameters in the config.ini file
 const sessionTimeout = process.env.SESSION_TIMEOUT;
+const sessionMap = process.env.SESSION_MAP;
 
 let map = new Map(); // Map Session IDs to track associated sockets & data
 const moment = require('moment'); // Use 'moment' library for timestamp handling
@@ -13,6 +14,30 @@ const fs = require('fs-extra'); // Use file system operations
 const authData = JSON.parse(fs.readFileSync('./config/auth.json', 'utf8')); // Load the auth.json file
 const authList = authData.auth;
 const adminList = authData.admin;
+
+// Load last session map from JSON
+function loadMap() {
+    try {
+        // Check if the file exists
+        if (fs.existsSync(`./config/${sessionMap}`)) {
+            // Load the map from the file
+            const data = fs.readFileSync(`./config/${sessionMap}`, 'utf8');
+            map = new Map(JSON.parse(data));
+            console.info('sessionMap loaded successfully.');
+        } else { console.info('Creating new sessionMap.'); }
+    } catch (error) { console.error('Error loading map:', error); }
+}
+
+// Store current session map to JSON
+function storeMap() {
+    try {
+        // Convert the map to JSON format
+        const jsonData = JSON.stringify(Array.from(map.entries()));
+        // Write the JSON data to the file
+        fs.writeFileSync(`./config/${sessionMap}`, jsonData, 'utf8');
+        console.info('sessionMap stored successfully.');
+    } catch (error) { console.error('Error storing map:', error); }
+}
 
 // Function to get access map variables
 function read(sessionId, keys) {
@@ -35,7 +60,7 @@ function update(sessionId, newData) {
 function create() {
     sessionId = uuid.v4();
     map.set(sessionId);
-    update(sessionId, {sessionIp: null, containerId: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: null});
+    update(sessionId, {sessionIp: null, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: null});
     return sessionId;
 }
 
@@ -73,10 +98,11 @@ function printMap() {
     console.debug(`Session Map Data, total entries '${map.size}':`);
     map.forEach((value, key) => {
         const sessionData = map.get(key);
-        const { sessionIp, containerId, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight, timestamp } = sessionData ?? '';
+        const { sessionIp, containerId, containerName, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight, timestamp } = sessionData ?? '';
         console.debug(`Session ID: ${key}\n` +
                       `Session IP: ${sessionIp}\n` +
                       `Container ID: ${containerId}\n` +
+                      `Container Name: ${containerName}\n` +
                       `DebugStatus: ${isDebug}\n` +
                       `LoginStatus: ${isLoggedIn}\n` +
                       `AdminStatus: ${isAdmin}\n` +
@@ -86,15 +112,15 @@ function printMap() {
 }
 
 // Function to remove expired sessions & cleanup containers
-function removeExpired() {
+async function removeExpired() {
     const now = moment();
     for (const [sessionId, sessionData] of map.entries()) {
         if (sessionData.timestamp) {
             const diff = now.diff(sessionData.timestamp, 'minutes');
-            if (diff > sessionTimeout) {
-                // Check if sessionData contains containerId information
-                dock.containerRemove(sessionData.containerId);
-                map.delete(sessionId); // Delete the timed out session entry					
+            if (diff > sessionTimeout && sessionData.containerId) { // If exists & timed out
+                console.log(`Session expired: ${sessionId}`);
+                await dock.containerRemove(sessionData.containerId);
+                map.delete(sessionId); // Delete the timed out session entry
             }
         }
     }
@@ -102,6 +128,8 @@ function removeExpired() {
 
 module.exports = {
     map,
+    loadMap,
+    storeMap,
     read,
     update,
     create,
