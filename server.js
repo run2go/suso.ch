@@ -17,6 +17,7 @@ const path = require('path'); // Allows working with file & directory paths
 const utility = require('./extension/utility.js'); // Require utility extension
 const console = require('./extension/logging.js'); // Use the logging functionality inside the logging.js file
 const cmd = require('./extension/cmd.js'); // Access cmd module to handle transmitted commands
+const dock = require('./extension/dockerode.js'); // Use dockerode module to handle containers & images
 const session = require('./extension/session.js'); // Import module to handle sessions
 const coordinates = require('./extension/coordinates.js'); // Import module to handle sessions
 
@@ -31,10 +32,14 @@ async function serverRun() {
 		let socketIO = require('socket.io');
 		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
 
+		session.loadMap(); // Load sessionMap file
+		await session.removeExpired(); // Remove expired sessions
+		await dock.containerPurge(session.map); // Purge unused containers
+		await dock.imageCreate(); // Create Docker image if outdated
 		await utility.copyFiles(path, mainDir); // Prepare Socket.io and Xterm.js client files
-		//await dock.imageCreate(); // Create Docker image if outdated
 		//docker rm $(docker ps -aq)
 		//docker rmi $(docker images -q)
+		//docker image build -t sandbox:latest .
 		
 		let app = express(); // Create main app using express framework
 		app.use(cors()); // Enable CORS (Cross-origin resource sharing)
@@ -67,19 +72,20 @@ async function serverRun() {
 		io = socketIO(server);
 
 		io.on('connection', (socket) => {
-			sockets.push(socket);
-			let sessionId = socket.handshake.query.sessionId;
-			let sessionIp = socket.handshake.headers["x-forwarded-for"] || socket.handshake.address;
+			const moment = require('moment'); // Use 'moment' library for timestamp handling
+			sockets.push(socket); // Add new sockets entry
+			let sessionId = socket.handshake.query.sessionId; // Retreive sessionId from client
+
 			// Generate client UUID if missing or invalid
 			if (!session.isValid(sessionId)) { // If provided UUID is invalid,
+				let sessionIp = socket.handshake.headers["x-forwarded-for"] || socket.handshake.address; // Use "x-forwarded-for", or fall back to address
 				sessionId = session.create(); // Generate new sessionId
-				session.update(sessionId, {sessionIp: sessionIp});
+				session.update(sessionId, { sessionIp: sessionIp, timestamp: moment() }); // Store sessionIp
 				socket.emit('sessionId', sessionId); // Assign sessionId
 				socket.emit('screenSize'); // Request screen data
 			}
 			console.log(`Client connected - Session ID: ${sessionId}`);
 
-			const moment = require('moment'); // Use 'moment' library for timestamp handling
 			socket.on('cmd', function (data) {
 				try {
 					const cmds = data.split(" ");
@@ -140,6 +146,7 @@ async function serverRun() {
 
 			socket.on('coordinates', function (data) {
 				try {
+					session.update(sessionId, { timestamp: moment() }); // Update the session timestamp
 					if (data.split(",").length === 4) {
 						let pos = data.split(",");
 						coordinates.handle(socket, sessionId, pos);
@@ -206,6 +213,7 @@ function serverRestart(server) {
 	serverRun(); // server doesn't close properly, needs fixing
 }
 function serverShutdown(server) { // Graceful shutdown function, forces shutdown if exit process fails
+	session.storeMap(); // Write current map data to 
 	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets 
     program.close(() => { process.exit(0); });
 	console.log(`${serverName} WebApp stopped`);
