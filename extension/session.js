@@ -122,6 +122,7 @@ async function removeExpired() {
             const diff = now.diff(sessionData.timestamp, 'minutes');
             if (diff > sessionTimeout && sessionData.containerId) { // If exists & timed out
                 console.log(`Session expired: ${sessionId}`);
+                update(sessionId, { containerId: null, containerName: null });
                 await dock.containerRemove(sessionData.containerId);
                 map.delete(sessionId); // Delete the timed out session entry
             }
