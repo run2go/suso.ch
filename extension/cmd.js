@@ -8,8 +8,7 @@ const session = require('./session.js');
 const dock = require('./dockerode.js');
 
 function info(sessionId) {
-    const sessionData = session.map.get(sessionId);
-    const { sessionIp, containerId, containerName, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight, timestamp } = sessionData ?? '';
+    const { sessionIp, containerId, containerName, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight, timestamp } = session.read(sessionId, ['sessionIp', 'containerId', 'containerName', 'isDebug', 'isLoggedIn', 'isAdmin', 'screenWidth', 'screenHeight', 'timestamp']);
     return  `console.warn("` +
             `Session ID: ${sessionId}\\n` +
             `Session IP: ${sessionIp}\\n` +
@@ -58,8 +57,7 @@ function theme(socket) { // Invert everything
     socket.emit('eval', themeScript);
 }
 
-function reset(socket, sessionId) { // Reset the client page
-    session.update(sessionId, { containerName: null });
+function reset(socket) { // Reset the client page
     const resetScript = fs.readFileSync('./stream/reset.js', 'utf8');
     socket.emit('eval', resetScript);
 }
@@ -77,7 +75,7 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
     // Use the stored screen size information to calculate cols and rows
     const cols = Math.floor(screenWidth / 8); // Character width of 8px
     const rows = Math.floor(screenHeight / 16); // Character height of 16px
-
+    
     process.env['TERM'] = 'xterm-256color'; // Support 256-bit color depth
     let shell;
     if (local) { // Create local terminal
@@ -91,16 +89,15 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
         });
         shell.write(isWin32 ? 'echo Hello!\r\n' : 'clear && cat /etc/motd\n');
     }
-    if (!containerId) { // Spawn new container if containerId is missing
+    if (!local && !containerId) { // Spawn new container if containerId is missing
         containerId = await dock.containerCreate(); // Create new container
         containerName = await dock.containerGetName(containerId); // Retrieve generated container name
-        session.update(sessionId, { containerId: containerId, containerName: containerName });
+        const isContainerRunning = await dock.containerRunning(containerId);
+        if (isContainerRunning) session.update(sessionId, { containerId: containerId, containerName: containerName });
+        else throw `Container didn't start properly`;
     }
 
-    let {sesIp} = session.read(sessionId, ['sessionIp']);
-    console.warn(sesIp  + " vs " + sessionId);
-    
-    if (containerName) { // Attach container console
+    if (!local && containerName) { // Attach container console
         shell = pty.spawn('docker', ['attach', `${containerName}`], {
             name: 'xterm-color',
             cols: cols,
@@ -108,12 +105,11 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
             cwd: process.env.HOME,
             env: process.env
         });
-    }
+    } else socket.emit('eval', `console.warn("Yikes");`);
 
     if (shell) {
-        // Pipe the output of the pseudo-terminal to the socket
+        // Pipe the output of the pseudo-terminal to the socket reaching the client
         shell.onData(data => {
-            // Emit the data to the client
             socket.emit('terminalOutput', data);
         });
 
@@ -128,6 +124,7 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
             shell.kill();
             reset(socket, sessionId);
         });
+        
         // Return the JavaScript code to create the terminal on client-side
         const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
         socket.emit('eval', terminalScript);
