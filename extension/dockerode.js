@@ -11,7 +11,6 @@ const { promisify } = require('util');
 const statAsync = promisify(fs.stat);
 const mainDir = process.cwd(); // Define server.js directory
 const console = require('./logging.js');
-const session = require('./session.js');
 
 async function imageCreate() {
     try {
@@ -46,7 +45,7 @@ async function imageCreate() {
             await image.remove({ force: true });
             console.info(`Dangling image ${danglingImage.Id} removed successfully.`);
         }
-        
+
         // Compare modification times of Dockerfile, entrypoint.sh and splash.sh with image creation time
         if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime || splashStats.mtime > imageCreatedTime) {
 
@@ -108,7 +107,7 @@ async function containerCreate() {
             StdinOnce: false,
             Cmd: ['/bin/ash'],
             HostConfig: {
-                AutoRemove: true // Set the --rm flag
+                //AutoRemove: true // Set the --rm flag
             }
         });
 
@@ -183,17 +182,17 @@ async function containerPurge(map) {
                     if (running) {
                         // Stop the container before removing it
                         const containerName = containerGetName(containerId);
-                        console.info(`Stopping container ${containerName}`);
+                        console.debug(`Stopping container ${containerName}`);
                         const container = docker.getContainer(containerId);
                         await container.stop();
                     }
                     // Remove the container
                     const containerName = containerGetName(containerId);
-                    console.info(`Removing container ${containerName}`);
+                    console.debug(`Removing container ${containerName}`);
                     const container = docker.getContainer(containerId);
                     await container.remove();
                 } else {
-                    console.info(`Container ${containerId} does not exist.`);
+                    console.debug(`Container ${containerId} does not exist.`);
                 }
             }
             console.info(`Containers purged: ${containers.length}`)
@@ -208,6 +207,7 @@ module.exports = {
     imageCreate,
     containerGetName,
     containerCreate,
+    containerRunning,
     containerRemove,
     containerPurge,
 };
