@@ -1,25 +1,15 @@
 #!/bin/sh
 
-# Assign $1 to tunnel_port if provided, otherwise use "80"
-tunnel_port="${1:-80}"
+# Define the path to the .bashrc file
+bashrc_file="/root/.bashrc"
 
-# Define the log file path
-log_file="/var/log/cloudflared.log"
+# Define the alias and append it to the .bashrc file
+echo 'alias tunnel="/usr/local/bin/tunnel.sh"' >> "$bashrc_file"
 
-# Remove the existing log file
-rm -f "$log_file"
+# Initialize tunnel and retrieve address & port
+tunnel_output=$(tunnel.sh init)
+tunnel_address=$(echo "$tunnel_output" | cut -d' ' -f1)
+tunnel_port=$(echo "$tunnel_output" | cut -d' ' -f2)
 
-# Create an empty log file
-touch "$log_file"
-
-# Stop any running cloudflared processes
-#pkill cloudflared
-
-# Start cloudflared service in the background and redirect its output to a log file
-/usr/local/bin/cloudflared tunnel --no-autoupdate --url "http://localhost:$tunnel_port" >> "$log_file" 2>&1 &
-
-# Run splash.sh to replace /etc/motd and pass the log file path as an argument
-/usr/local/bin/splash.sh "$log_file" "$tunnel_port" >> /etc/motd &
-
-# Execute the commands passed to the container
-exec /bin/ash
+# Run splash.sh with tunnel data
+/usr/local/bin/splash.sh "$tunnel_address" "$tunnel_port"
