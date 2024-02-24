@@ -73,7 +73,7 @@ function debug(sessionId) {
 async function terminal(socket, sessionId, local = false) { // Create terminal for the client
     // Retrieve containerId, containerName and screen size of active sessionId
     let {containerId, containerName, screenWidth, screenHeight} = session.read(sessionId, ['containerId', 'containerName', 'screenWidth', 'screenHeight']);
-    
+
     // Use the stored screen size information to calculate cols and rows
     const cols = Math.floor(screenWidth / 8); // Character width of 8px
     const rows = Math.floor(screenHeight / 16); // Character height of 16px
@@ -95,10 +95,11 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
         containerId = await dock.containerCreate(); // Create new container
         containerName = await dock.containerGetName(containerId); // Retrieve generated container name
         session.update(sessionId, { containerId: containerId, containerName: containerName });
-        let {conId, conName} = session.read(sessionId, ['containerId', 'containerName']);
-        console.log(conName + " vs " + containerName);
-        console.log(conId + " vs " + containerId);
     }
+
+    let {sesIp} = session.read(sessionId, ['sessionIp']);
+    console.warn(sesIp  + " vs " + sessionId);
+    
     if (containerName) { // Attach container console
         shell = pty.spawn('docker', ['attach', `${containerName}`], {
             name: 'xterm-color',

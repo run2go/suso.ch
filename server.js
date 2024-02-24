@@ -75,21 +75,20 @@ async function serverRun() {
 			const moment = require('moment'); // Use 'moment' library for timestamp handling
 			sockets.push(socket); // Add new sockets entry
 			let sessionId = socket.handshake.query.sessionId; // Retreive sessionId from client
+			let sessionIp = socket.handshake.headers["x-forwarded-for"] || socket.handshake.address; // Use "x-forwarded-for", or fall back to address
 
 			// Generate client UUID if missing or invalid
-			if (!session.isValid(sessionId)) { // If provided UUID is invalid,
-				let sessionIp = socket.handshake.headers["x-forwarded-for"] || socket.handshake.address; // Use "x-forwarded-for", or fall back to address
-				sessionId = session.create(); // Generate new sessionId
-				session.update(sessionId, { sessionIp: sessionIp, timestamp: moment() }); // Store sessionIp
-				socket.emit('sessionId', sessionId); // Assign sessionId
-				socket.emit('screenSize'); // Request screen data
-			}
-			console.log(`Client connected - Session ID: ${sessionId}`);
+			if (!session.isValid(sessionId)) sessionId = session.create(); // Generate new sessionId
+			session.init(sessionId);
+			session.update(sessionId, { sessionIp: sessionIp, timestamp: moment() }); // Store sessionIp
+			socket.emit('sessionId', sessionId); // Assign sessionId
+			socket.emit('screenSize'); // Request screen data
+
+			console.log(`Client connected - Session ID: ${sessionId} on ${sessionIp}`);
 
 			socket.on('cmd', function (data) {
 				try {
 					const cmds = data.split(" ");
-					session.update(sessionId, { timestamp: moment() }); // Update the session timestamp
 
 					console.debug('Input:', data);
 					if (session.isDebug(sessionId)) socket.emit('output', cmds); // Echo received commands back

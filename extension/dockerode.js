@@ -42,12 +42,12 @@ async function imageCreate() {
             // Remove the existing image with the specified name
             const existingImage = images.find(image => image.RepoTags.includes(imageName));
             if (existingImage) {
-                console.log(`Removing existing image: ${imageName}`);
+                console.info(`Removing existing image "${imageName}"`);
                 const image = docker.getImage(existingImage.Id);
                 await image.remove({ force: true });
-                console.log(`Image ${imageName} removed successfully.`);
+                console.info(`Image "${imageName}" removed successfully.`);
             } else {
-                console.log(`Image ${imageName} does not exist.`);
+                console.info(`Image "${imageName}" does not exist.`);
             }
 
             // Remove dangling and "<none>" images
@@ -55,17 +55,17 @@ async function imageCreate() {
                 return (image.RepoTags.includes('<none>') || image.RepoTags.length === 0);
             });
             for (const danglingImage of danglingImages) {
-                console.log(`Removing dangling image: ${danglingImage.Id}`);
+                console.info(`Removing dangling image: ${danglingImage.Id}`);
                 const image = docker.getImage(danglingImage.Id);
                 await image.remove({ force: true });
-                console.log(`Dangling image ${danglingImage.Id} removed successfully.`);
+                console.info(`Dangling image ${danglingImage.Id} removed successfully.`);
             }
             
             console.info(`Creating new Docker image "${imageName}:latest".`);
             // Create the new image
             docker.buildImage({
                 context: `${mainDir}/container/`,
-                src: ['Dockerfile', 'entrypoint.sh', 'splash.sh'] },
+                src: ['Dockerfile', 'entrypoint.sh', 'splash.sh', 'tunnel.sh'] },
                 { t: `${imageName}:latest` },
                 (err, stream) => {
                     if (err) { console.error(err); return; }
@@ -120,15 +120,40 @@ async function containerCreate() {
     } catch (error) { console.error('Error creating and starting Docker container: ', error); return null; }
 }
 
+// Function to check if a container exists
+async function containerExists(containerId) {
+    try {
+        // Attempt to get the container object
+        const container = docker.getContainer(containerId);
+        await container.inspect(); // Try to inspect the container
+        return true; // Container exists
+    } catch (error) {
+        // If an error occurs, the container doesn't exist
+        return false;
+    }
+}
+
 // Function to remove a container
 async function containerRemove(containerId) {
-    const containerName = containerGetName(containerId);
     try {
-        const container = docker.getContainer(containerId); // Get Container object
-        await container.remove(); // Remove the container
-        console.log(`Container successfully ${containerName} removed.`);
-    } catch (error) { console.error(`Error removing container ${containerName}: `, error); }
+        const containerName = await containerGetName(containerId);
+
+        if (await containerExists(containerId)) {
+            // Container exists, proceed with removal
+            const container = docker.getContainer(containerId);
+            await container.remove(); // Remove the container
+            console.log(`Container ${containerName} successfully removed.`);
+        } else {
+            // Container doesn't exist, notify the user
+            console.log(`Container ${containerName} no longer exists.`);
+        }
+    } catch (error) {
+        // Handle any errors during container removal
+        console.error('Error removing container:', error);
+    }
 }
+
+
 
 // Function to remove all containers that aren't actively used
 async function containerPurge(map) {
@@ -140,16 +165,26 @@ async function containerPurge(map) {
         for (const containerInfo of containers) {
             // Check if the container ID exists in the session map
             if (!map.has(containerInfo.Id)) {
-                // Remove the container
-                const containerName = containerGetName(containerInfo.Id);
-                console.info(`Removing container ${containerName}`);
-                const container = docker.getContainer(containerInfo.Id);
-                await container.stop();
-                await container.remove();
+                // Check if the container exists
+                const containerId = containerInfo.Id;
+                const exists = await containerExists(containerId);
+                if (exists) {
+                    // Remove the container
+                    const containerName = containerGetName(containerId);
+                    console.info(`Removing container ${containerName}`);
+                    const container = docker.getContainer(containerId);
+                    await container.stop();
+                    await container.remove();
+                } else {
+                    console.info(`Container ${containerId} does not exist.`);
+                }
             }
         }
-    } catch (error) { console.error('Error removing containers not in session map:', error); }
+    } catch (error) {
+        console.error('Error removing containers not in session map:', error);
+    }
 }
+
 
 module.exports = {
     imageCreate,
