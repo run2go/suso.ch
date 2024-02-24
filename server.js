@@ -26,21 +26,18 @@ let sockets = []; // Maintain a list of active sockets
 
 async function serverRun() {
 	try {		
-		// Import necessary modules
-		let express = require('express');
-		let http = require('http');
-		let socketIO = require('socket.io');
-		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
-
 		session.loadMap(); // Load sessionMap file
 		await session.removeExpired(); // Remove expired sessions
 		await dock.containerPurge(session.map); // Purge unused containers
 		await dock.imageCreate(); // Create Docker image if outdated
 		await utility.copyFiles(path, mainDir); // Prepare Socket.io and Xterm.js client files
-		//docker rm $(docker ps -aq)
-		//docker rmi $(docker images -q)
-		//docker image build -t sandbox:latest .
-		
+
+		// Import modules
+		let express = require('express');
+		let http = require('http');
+		let socketIO = require('socket.io');
+		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
+
 		let app = express(); // Create main app using express framework
 		app.use(cors()); // Enable CORS (Cross-origin resource sharing)
 
@@ -122,7 +119,7 @@ async function serverRun() {
 							case 'console': cmd.terminal(socket, sessionId); break;
 							case 'debug': res = cmd.debug(sessionId); break;
 							case 'escape':
-							case 'exit': cmd.reset(socket, sessionId); break;
+							case 'exit': cmd.reset(socket); break;
 						}
 					}
 					else if (partialAdminMatch && isLoggedIn && isAdmin) { // Admin commands
@@ -131,7 +128,6 @@ async function serverRun() {
 						}
 					}
 					if (res) socket.emit('eval', res); // Send payload to client
-					//session.printMap(); // Display sessionMap data
 				} catch (error) { console.error(error); }
 			});
 
