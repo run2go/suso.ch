@@ -39,10 +39,10 @@ function storeMap() {
     } catch (error) { console.error('Error storing map:', error); }
 }
 
-// Function to get access map variables
+// Function to access map variables
 function read(sessionId, keys) {
     const sessionData = map.get(sessionId);
-    const result = {};
+    let result = {};
     keys.forEach(key => {
         result[key] = sessionData ? sessionData[key] : undefined;
     });
@@ -60,8 +60,11 @@ function update(sessionId, newData) {
 function create() {
     sessionId = uuid.v4();
     map.set(sessionId);
-    update(sessionId, {sessionIp: null, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: null});
     return sessionId;
+}
+
+function init(sessionId) {
+    update(sessionId, {sessionIp: null, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: null});
 }
 
 // Function to validate session UUIDs
@@ -133,6 +136,7 @@ module.exports = {
     read,
     update,
     create,
+    init,
     isValid,
     isLoggedIn,
     isAdmin,
