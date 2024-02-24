@@ -34,7 +34,7 @@ async function copyFiles(path, directory) {
                 await fs.copyFile(src, dest);
                 console.debug(`Copied "${src}" to "${dest}"`);
             } else {
-                console.debug(`File "${src}" is up to date.`);
+                console.debug(`File "${dest}" is up to date.`);
             }
         }
     } catch (error) {
