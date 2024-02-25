@@ -19,7 +19,7 @@ RUN chmod +x /usr/local/bin/tunnel.sh
 RUN chmod +x /usr/local/bin/splash.sh
 
 # Define shell
-CMD ["/bin/ash"]
+CMD ["/bin/sh"]
 
 # Set the entrypoint of the container
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
