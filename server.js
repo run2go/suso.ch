@@ -46,7 +46,7 @@ async function serverRun() {
 		app.get('*', function (request, response) { // Handle GET requests
 			try {
 				//printRequest(request);
-				isAgentCLI = detectAgent(request.headers['user-agent'].toLowerCase());
+				isAgentCLI = detectAgent(request.headers['user-agent']);
 				serveData(response, isAgentCLI);
 			} catch (error) { console.error(error.message); }
 		});
@@ -163,6 +163,7 @@ async function serverRun() {
 		}	
 
 		function detectAgent(user) {
+			if (user) user = user.toLowerCase();
 			return !!(user.includes('curl') || user.includes('shell'));
 		}
 
@@ -200,19 +201,20 @@ async function serverRun() {
 	} catch (error) { console.error(`[ERROR] ${error.message}`); }
 }
 
-
 function serverRestart(server) {
-	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets 
-	server.close(() => {});
-	program.close(() => { console.log(`${serverName} WebApp restarting`); }); // Close the server, trigger restart
-	serverRun(); // server doesn't close properly, needs fixing
+    session.storeMap(); // Save current sessionMap
+    server.close(() => {
+		process.stdin.removeAllListeners('data');
+		console.log(`${serverName} WebApp restarting`);
+		serverRun(); // Start a new server instance after the previous one has fully closed
+	});
 }
 function serverShutdown(server) { // Graceful shutdown function, forces shutdown if exit process fails
-	session.storeMap(); // Write current map data to 
-	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets 
+	session.storeMap(); // Save current sessionMap
+	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets on shutdown
     program.close(() => { process.exit(0); });
 	console.log(`${serverName} WebApp stopped`);
-    setTimeout(() => { serverTerminate(); }, 100); // Force shutdown if server hasn't stopped within 0.1s
+    setTimeout(() => { serverTerminate(); }, 250); // Force shutdown if server hasn't stopped within 0.25s
 }
 function serverTerminate() {
 	console.error(`${serverName} WebApp terminated`);
