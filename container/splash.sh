@@ -11,9 +11,11 @@ os='Alpine Linux'
 kernel="$(uname -sr)"
 docker="$(docker -v | awk '{gsub(/,/, "", $3); print $3}')"
 shell="$(grep "^$(id -un):" /etc/passwd | awk -F: '{print $7}')"
-address="$(curl --no-progress-meter ip.y1f.de)"
-#address="$(curl -s -L ip.y1f.de 2>/dev/null)"
-#--no-progress-meter
+address="$(curl --no-progress-meter ip.y1f.de 2>/dev/null)"
+if [ -z "$address" ]; then
+    address="none"
+fi
+
 
 ## DEFINE COLORS
 bold='\033[1m'
@@ -28,12 +30,12 @@ white='\033[0;37m'
 reset='\033[0m'
 
 ## COMBINED STYLE
-ycb="${reset}${bold}${yellow}"       # bold yellow
-mcb="${reset}${bold}${magenta}"      # bold magenta
-bcb="${reset}${bold}${blue}"         # bold blue
-bc="${reset}${blue}"                 # blue
-wc="${reset}${white}"                # white
-rc="${reset}${red}"                # red
+ycb="${reset}${bold}${yellow}"   # bold yellow
+mcb="${reset}${bold}${magenta}"  # bold magenta
+bcb="${reset}${bold}${blue}"     # bold blue
+bc="${reset}${blue}"             # blue
+wc="${reset}${white}"            # white
+rc="${reset}${red}"              # red
 
 ## OUTPUT
 printf "
