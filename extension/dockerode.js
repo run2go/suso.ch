@@ -17,21 +17,23 @@ async function imageCreate() {
         const dockerfilePath = './container/Dockerfile';
         const entrypointPath = './container/entrypoint.sh';
         const splashPath = './container/splash.sh';
+        const tunnelPath = './container/tunnel.sh';
 
         // Check if the Dockerfile, entrypoint.sh or splash.sh files have been modified
-        const [dockerfileStats, entrypointStats, splashStats] = await Promise.all([
+        const [dockerfileStats, entrypointStats, splashStats, tunnelStats] = await Promise.all([
             statAsync(dockerfilePath),
             statAsync(entrypointPath),
-            statAsync(splashPath)
+            statAsync(splashPath),
+            statAsync(tunnelPath)
         ]);
 
         // Get the creation date of the Docker image
-        let imageCreatedTime;
+        let imgTime;
         try {
             const image = docker.getImage(imageName);
             const inspectData = await image.inspect();
-            imageCreatedTime = new Date(inspectData.Created);
-        } catch (error) { imageCreatedTime = new Date(0); } // Image does not exist
+            imgTime = new Date(inspectData.Created);
+        } catch (error) { imgTime = new Date(0); } // Image does not exist
 
         // Get a list of all images
         const images = await docker.listImages();
@@ -47,7 +49,7 @@ async function imageCreate() {
         }
 
         // Compare modification times of Dockerfile, entrypoint.sh and splash.sh with image creation time
-        if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime || splashStats.mtime > imageCreatedTime) {
+        if (dockerfileStats.mtime > imgTime || entrypointStats.mtime > imgTime || splashStats.mtime > imgTime || tunnelStats.mtime > imgTime) {
 
             // Remove the existing image with the specified name
             const existingImage = images.find(image => image.RepoTags.includes(imageName));
@@ -64,7 +66,7 @@ async function imageCreate() {
             // Create the new image
             docker.buildImage({
                 context: `${mainDir}/container/`,
-                src: ['Dockerfile', 'entrypoint.sh', 'splash.sh', 'tunnel.sh'] },
+                src: ['Dockerfile', 'entrypoint.sh', 'tunnel.sh', 'splash.sh'] },
                 { t: `${imageName}:latest` },
                 (err, stream) => {
                     if (err) { console.error(err); return; }
@@ -105,7 +107,7 @@ async function containerCreate() {
             AttachStderr: true,
             OpenStdin: true,
             StdinOnce: false,
-            Cmd: ['/bin/ash'],
+            Cmd: ['/bin/sh'],
             HostConfig: {
                 //AutoRemove: true // Set the --rm flag
             }
@@ -116,7 +118,7 @@ async function containerCreate() {
 
         // Return the containerId
         return container.id;
-    } catch (error) { console.error('Error creating and starting Docker container: ', error); return null; }
+    } catch (error) { console.error('Error creating and starting Docker container:', error); }
 }
 
 // Function to check if a container is running
@@ -179,15 +181,14 @@ async function containerPurge(map) {
                 const exists = await containerExists(containerId);
                 if (exists) {
                     const running = await containerRunning(containerId);
+                    const containerName = await containerGetName(containerId);
                     if (running) {
                         // Stop the container before removing it
-                        const containerName = containerGetName(containerId);
                         console.debug(`Stopping container ${containerName}`);
                         const container = docker.getContainer(containerId);
                         await container.stop();
                     }
                     // Remove the container
-                    const containerName = containerGetName(containerId);
                     console.debug(`Removing container ${containerName}`);
                     const container = docker.getContainer(containerId);
                     await container.remove();
@@ -195,8 +196,8 @@ async function containerPurge(map) {
                     console.debug(`Container ${containerId} does not exist.`);
                 }
             }
-            console.info(`Containers purged: ${containers.length}`)
         }
+        console.info(`Containers purged: ${containers.length}`);
     } catch (error) {
         console.error('Error removing containers not in session map:', error);
     }
