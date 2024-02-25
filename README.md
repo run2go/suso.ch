@@ -16,7 +16,8 @@ suso.ch makes use of the following tools & software:
 
 
 ## Usage
-Pull command:
+Enter "`help`" into the console to get an overview of the available serverside CLI commands.
+
 ```sh
 ~♥
 ```
@@ -24,18 +25,17 @@ Pull command:
 Detach key sequence:
 `CTRL+P + CTLR+Q `
 
-
-Enter "`help`" into the console to get an overview of the available serverside CLI commands.
-
 ## Temporary Container
-The default Dockerfile is ued to create containers with basic functionality:
+The default Dockerfile is used to create containers with basic functionality:
 
 | Function | Description |
 | ------ | ------ |
 | Cloudflared | Generates temporary URL |
+| Docker | Containerization software |
 | net-tools | Collection of networking utilities |
 | cURL | CLI tool and library |
 | htop | Interactive Task Manager |
+| nano | Simple text editor |
 
 
 ## License
