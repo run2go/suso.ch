@@ -98,11 +98,11 @@ function comparePassword(sessionId, pass) {
 
 // Helper function to keep track of map values
 function printMap() {
-    console.debug(`Session Map Data, total entries '${map.size}':`);
+    console.info(`Session Map Data, total entries '${map.size}':`);
     map.forEach((value, key) => {
         const sessionData = map.get(key);
         const { sessionIp, containerId, containerName, isDebug, isLoggedIn, isAdmin, screenWidth, screenHeight, timestamp } = sessionData ?? '';
-        console.debug(`Session ID: ${key}\n` +
+        console.info(`Session ID: ${key}\n` +
                       `Session IP: ${sessionIp}\n` +
                       `Container ID: ${containerId}\n` +
                       `Container Name: ${containerName}\n` +
@@ -121,7 +121,8 @@ async function removeExpired() {
         if (sessionData.timestamp) {
             const diff = now.diff(sessionData.timestamp, 'minutes');
             if (diff > sessionTimeout && sessionData.containerId) { // If exists & timed out
-                console.log(`Session expired: ${sessionId}`);
+                console.info(`Session expired: ${sessionId}`);
+                update(sessionId, { containerId: null, containerName: null });
                 await dock.containerRemove(sessionData.containerId);
                 map.delete(sessionId); // Delete the timed out session entry
             }

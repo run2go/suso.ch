@@ -24,6 +24,7 @@ async function copyFiles(path, directory) {
         ]
     ];
     try {
+        let handledFiles = 0;
         for (const [src, dest] of filePairs) {
             const srcStat = await fs.stat(src);
             const destStat = await fs.stat(dest);
@@ -33,10 +34,12 @@ async function copyFiles(path, directory) {
                 await fs.ensureDir(path.dirname(dest));
                 await fs.copyFile(src, dest);
                 console.debug(`Copied "${src}" to "${dest}"`);
+                handledFiles++;
             } else {
-                console.debug(`File "${src}" is up to date.`);
+                console.debug(`File "${dest}" is up to date.`);
             }
         }
+        if (handledFiles > 0) console.info(`Web files handled: ${filePairs.length}`);
     } catch (error) {
         console.error('Failed to copy files:', error);
     }

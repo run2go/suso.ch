@@ -26,21 +26,18 @@ let sockets = []; // Maintain a list of active sockets
 
 async function serverRun() {
 	try {		
-		// Import necessary modules
-		let express = require('express');
-		let http = require('http');
-		let socketIO = require('socket.io');
-		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
-
 		session.loadMap(); // Load sessionMap file
 		await session.removeExpired(); // Remove expired sessions
 		await dock.containerPurge(session.map); // Purge unused containers
 		await dock.imageCreate(); // Create Docker image if outdated
 		await utility.copyFiles(path, mainDir); // Prepare Socket.io and Xterm.js client files
-		//docker rm $(docker ps -aq)
-		//docker rmi $(docker images -q)
-		//docker image build -t sandbox:latest .
-		
+
+		// Import modules
+		let express = require('express');
+		let http = require('http');
+		let socketIO = require('socket.io');
+		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
+
 		let app = express(); // Create main app using express framework
 		app.use(cors()); // Enable CORS (Cross-origin resource sharing)
 
@@ -49,7 +46,7 @@ async function serverRun() {
 		app.get('*', function (request, response) { // Handle GET requests
 			try {
 				//printRequest(request);
-				isAgentCLI = detectAgent(request.headers['user-agent'].toLowerCase());
+				isAgentCLI = detectAgent(request.headers['user-agent']);
 				serveData(response, isAgentCLI);
 			} catch (error) { console.error(error.message); }
 		});
@@ -122,7 +119,7 @@ async function serverRun() {
 							case 'console': cmd.terminal(socket, sessionId); break;
 							case 'debug': res = cmd.debug(sessionId); break;
 							case 'escape':
-							case 'exit': cmd.reset(socket, sessionId); break;
+							case 'exit': cmd.reset(socket); break;
 						}
 					}
 					else if (partialAdminMatch && isLoggedIn && isAdmin) { // Admin commands
@@ -131,7 +128,6 @@ async function serverRun() {
 						}
 					}
 					if (res) socket.emit('eval', res); // Send payload to client
-					//session.printMap(); // Display sessionMap data
 				} catch (error) { console.error(error); }
 			});
 
@@ -167,6 +163,7 @@ async function serverRun() {
 		}	
 
 		function detectAgent(user) {
+			if (user) user = user.toLowerCase();
 			return !!(user.includes('curl') || user.includes('shell'));
 		}
 
@@ -204,19 +201,20 @@ async function serverRun() {
 	} catch (error) { console.error(`[ERROR] ${error.message}`); }
 }
 
-
 function serverRestart(server) {
-	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets 
-	server.close(() => {});
-	program.close(() => { console.log(`${serverName} WebApp restarting`); }); // Close the server, trigger restart
-	serverRun(); // server doesn't close properly, needs fixing
+    session.storeMap(); // Save current sessionMap
+    server.close(() => {
+		process.stdin.removeAllListeners('data');
+		console.log(`${serverName} WebApp restarting`);
+		serverRun(); // Start a new server instance after the previous one has fully closed
+	});
 }
 function serverShutdown(server) { // Graceful shutdown function, forces shutdown if exit process fails
-	session.storeMap(); // Write current map data to 
-	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets 
+	session.storeMap(); // Save current sessionMap
+	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets on shutdown
     program.close(() => { process.exit(0); });
 	console.log(`${serverName} WebApp stopped`);
-    setTimeout(() => { serverTerminate(); }, 100); // Force shutdown if server hasn't stopped within 0.1s
+    setTimeout(() => { serverTerminate(); }, 250); // Force shutdown if server hasn't stopped within 0.25s
 }
 function serverTerminate() {
 	console.error(`${serverName} WebApp terminated`);

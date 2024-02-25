@@ -11,33 +11,45 @@ const { promisify } = require('util');
 const statAsync = promisify(fs.stat);
 const mainDir = process.cwd(); // Define server.js directory
 const console = require('./logging.js');
-const session = require('./session.js');
 
 async function imageCreate() {
     try {
         const dockerfilePath = './container/Dockerfile';
         const entrypointPath = './container/entrypoint.sh';
         const splashPath = './container/splash.sh';
+        const tunnelPath = './container/tunnel.sh';
 
         // Check if the Dockerfile, entrypoint.sh or splash.sh files have been modified
-        const [dockerfileStats, entrypointStats, splashStats] = await Promise.all([
+        const [dockerfileStats, entrypointStats, splashStats, tunnelStats] = await Promise.all([
             statAsync(dockerfilePath),
             statAsync(entrypointPath),
-            statAsync(splashPath)
+            statAsync(splashPath),
+            statAsync(tunnelPath)
         ]);
 
         // Get the creation date of the Docker image
-        let imageCreatedTime;
+        let imgTime;
         try {
             const image = docker.getImage(imageName);
             const inspectData = await image.inspect();
-            imageCreatedTime = new Date(inspectData.Created);
-        } catch (error) { imageCreatedTime = new Date(0); } // Image does not exist
+            imgTime = new Date(inspectData.Created);
+        } catch (error) { imgTime = new Date(0); } // Image does not exist
+
+        // Get a list of all images
+        const images = await docker.listImages();
+        // Remove dangling and "<none>" images
+        const danglingImages = images.filter(image => {
+            return (image.RepoTags.includes('<none>') || image.RepoTags.length === 0);
+        });
+        for (const danglingImage of danglingImages) {
+            console.info(`Removing dangling image: ${danglingImage.Id}`);
+            const image = docker.getImage(danglingImage.Id);
+            await image.remove({ force: true });
+            console.info(`Dangling image ${danglingImage.Id} removed successfully.`);
+        }
 
         // Compare modification times of Dockerfile, entrypoint.sh and splash.sh with image creation time
-        if (dockerfileStats.mtime > imageCreatedTime || entrypointStats.mtime > imageCreatedTime || splashStats.mtime > imageCreatedTime) {
-            // Get a list of all images
-            const images = await docker.listImages();
+        if (dockerfileStats.mtime > imgTime || entrypointStats.mtime > imgTime || splashStats.mtime > imgTime || tunnelStats.mtime > imgTime) {
 
             // Remove the existing image with the specified name
             const existingImage = images.find(image => image.RepoTags.includes(imageName));
@@ -49,23 +61,12 @@ async function imageCreate() {
             } else {
                 console.info(`Image "${imageName}" does not exist.`);
             }
-
-            // Remove dangling and "<none>" images
-            const danglingImages = images.filter(image => {
-                return (image.RepoTags.includes('<none>') || image.RepoTags.length === 0);
-            });
-            for (const danglingImage of danglingImages) {
-                console.info(`Removing dangling image: ${danglingImage.Id}`);
-                const image = docker.getImage(danglingImage.Id);
-                await image.remove({ force: true });
-                console.info(`Dangling image ${danglingImage.Id} removed successfully.`);
-            }
             
             console.info(`Creating new Docker image "${imageName}:latest".`);
             // Create the new image
             docker.buildImage({
                 context: `${mainDir}/container/`,
-                src: ['Dockerfile', 'entrypoint.sh', 'splash.sh', 'tunnel.sh'] },
+                src: ['Dockerfile', 'entrypoint.sh', 'tunnel.sh', 'splash.sh'] },
                 { t: `${imageName}:latest` },
                 (err, stream) => {
                     if (err) { console.error(err); return; }
@@ -106,7 +107,7 @@ async function containerCreate() {
             AttachStderr: true,
             OpenStdin: true,
             StdinOnce: false,
-            Cmd: ['/bin/ash'],
+            Cmd: ['/bin/sh'],
             HostConfig: {
                 //AutoRemove: true // Set the --rm flag
             }
@@ -117,7 +118,19 @@ async function containerCreate() {
 
         // Return the containerId
         return container.id;
-    } catch (error) { console.error('Error creating and starting Docker container: ', error); return null; }
+    } catch (error) { console.error('Error creating and starting Docker container:', error); }
+}
+
+// Function to check if a container is running
+async function containerRunning(containerId) {
+    try {
+        const container = docker.getContainer(containerId);
+        const data = await container.inspect();
+        return data.State.Running;
+    } catch (error) {
+        console.error(`Error checking container ${containerId} status:`, error);
+        return false; // Assume container is not running in case of error
+    }
 }
 
 // Function to check if a container exists
@@ -153,8 +166,6 @@ async function containerRemove(containerId) {
     }
 }
 
-
-
 // Function to remove all containers that aren't actively used
 async function containerPurge(map) {
     try {
@@ -165,21 +176,28 @@ async function containerPurge(map) {
         for (const containerInfo of containers) {
             // Check if the container ID exists in the session map
             if (!map.has(containerInfo.Id)) {
-                // Check if the container exists
+                // Check if the container exists and is running
                 const containerId = containerInfo.Id;
                 const exists = await containerExists(containerId);
                 if (exists) {
+                    const running = await containerRunning(containerId);
+                    const containerName = await containerGetName(containerId);
+                    if (running) {
+                        // Stop the container before removing it
+                        console.debug(`Stopping container ${containerName}`);
+                        const container = docker.getContainer(containerId);
+                        await container.stop();
+                    }
                     // Remove the container
-                    const containerName = containerGetName(containerId);
-                    console.info(`Removing container ${containerName}`);
+                    console.debug(`Removing container ${containerName}`);
                     const container = docker.getContainer(containerId);
-                    await container.stop();
                     await container.remove();
                 } else {
-                    console.info(`Container ${containerId} does not exist.`);
+                    console.debug(`Container ${containerId} does not exist.`);
                 }
             }
         }
+        console.info(`Containers purged: ${containers.length}`);
     } catch (error) {
         console.error('Error removing containers not in session map:', error);
     }
@@ -190,6 +208,7 @@ module.exports = {
     imageCreate,
     containerGetName,
     containerCreate,
+    containerRunning,
     containerRemove,
     containerPurge,
 };

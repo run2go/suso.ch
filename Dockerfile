@@ -1,11 +1,8 @@
 # Use Alpine Linux as base image
 FROM alpine:latest
 
-# Install node, docker, wireguard-tools & install dockerode package for Node.js
-RUN apk --no-cache add node docker wireguard-tools npm
-
-# Copy the WireGuard configuration file
-COPY ./config/wg.conf /etc/wireguard/
+# Install packages
+RUN apk --no-cache add openrc sudo wireguard-tools wireguard-tools-wg-quick iptables docker npm nodejs
 
 # Create app directory
 RUN mkdir -p /usr/src/app
@@ -16,11 +13,17 @@ COPY . /usr/src/app
 # Define app directory
 WORKDIR /usr/src/app/
 
+# Copy the WireGuard configuration file
+RUN cp /usr/src/app/config/wg.conf /etc/wireguard/wg0.conf
+
 # Install app dependencies
 RUN npm install
 
-# Expose port
-EXPOSE 3000
+# Add services to rc-update
+RUN rc-update add sysctl
+RUN rc-update add docker
+RUN rc-update add sysctl 
+#RUN rc-update add wg
 
-# Start the application
-CMD ["node", "server.js"]
+# Set the entrypoint of the container
+ENTRYPOINT ["/usr/src/app/entrypoint.sh"]

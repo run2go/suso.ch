@@ -1,5 +1,4 @@
 node_modules
 *.log
-/config/*.json
-/config/wg.conf
+/config/*
 /web/inc/*
