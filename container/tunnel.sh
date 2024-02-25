@@ -57,6 +57,13 @@ tunnel_port="${1:-80}"
 # Initialize tunnel URL variable
 tunnel_url=""
 
+# Download cloudflared binary if missing
+if [ ! -f "/usr/local/bin/cloudflared" ]; then
+    wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+    chmod +x /usr/local/bin/cloudflared
+    echo "Cloudflared binary downloaded and installed."
+fi
+
 if [ "$1" = "init" ]; then
     # Create new storage file
     > "$temp_file"
