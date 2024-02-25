@@ -77,7 +77,7 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
     const rows = Math.floor(screenHeight / 16); // Character height of 16px
     
     process.env['TERM'] = 'xterm-256color'; // Support 256-bit color depth
-    let shell;
+    let shell = null;
     if (local) { // Create local terminal
         const isWin32 = !!(os.platform() === 'win32');
         shell = pty.spawn(isWin32 ? 'cmd.exe' : 'bash', [], {
@@ -92,44 +92,50 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
     if (!local && !containerId) { // Spawn new container if containerId is missing
         containerId = await dock.containerCreate(); // Create new container
         containerName = await dock.containerGetName(containerId); // Retrieve generated container name
-        const isContainerRunning = await dock.containerRunning(containerId);
-        if (isContainerRunning) session.update(sessionId, { containerId: containerId, containerName: containerName });
-        else throw `Container didn't start properly`;
     }
 
-    if (!local && containerName) { // Attach container console
-        shell = pty.spawn('docker', ['attach', `${containerName}`], {
-            name: 'xterm-color',
-            cols: cols,
-            rows: rows,
-            cwd: process.env.HOME,
-            env: process.env
-        });
-    } else socket.emit('eval', `console.warn("Yikes");`);
+    // Proceed if container is running
+    const isContainerRunning = await dock.containerRunning(containerId);
+    if (isContainerRunning) {
+        session.update(sessionId, { containerId: containerId, containerName: containerName });
 
-    if (shell) {
-        // Pipe the output of the pseudo-terminal to the socket reaching the client
-        shell.onData(data => {
-            socket.emit('terminalOutput', data);
-        });
+        if (!local && containerName) { // Attach container console
+            shell = pty.spawn('docker', ['attach', `${containerName}`], {
+                name: 'xterm-color',
+                cols: cols,
+                rows: rows,
+                cwd: process.env.HOME,
+                env: process.env
+            });
+        } 
 
-        // Handle input from the client and write it to the pseudo-terminal
-        socket.on('terminalInput', input => {
-            shell.write(input);
-        });
+        if (shell) {
+            // Pipe the output of the pseudo-terminal to the socket reaching the client
+            shell.onData(data => {
+                socket.emit('terminalOutput', data);
+            });
 
-        // Listen for the exit event
-        shell.on('exit', () => {
-            console.info(`Terminal "${containerName || 'local'}" closed from ${sessionId}`);
-            shell.kill();
-            reset(socket, sessionId);
-        });
-        
-        // Return the JavaScript code to create the terminal on client-side
-        const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
-        socket.emit('eval', terminalScript);
-        console.info(`Terminal "${containerName || 'local'}" attached to ${sessionId}`);
-    } else socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
+            // Handle input from the client and write it to the pseudo-terminal
+            socket.on('terminalInput', input => {
+                shell.write(input);
+            });
+
+            // Listen for the exit event
+            shell.on('exit', () => {
+                console.info(`Terminal "${containerName || 'local'}" closed from ${sessionId}`);
+                shell.kill();
+                reset(socket, sessionId);
+            });
+            
+            // Return the JavaScript code to create the terminal on client-side
+            const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
+            socket.emit('eval', terminalScript);
+            console.info(`Terminal "${containerName || 'local'}" attached to ${sessionId}`);
+        }
+    } else { // Throw generic error
+        await dock.containerRemove(containerId);
+        socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
+    }
 }
 
 module.exports = {
