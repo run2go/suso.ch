@@ -46,6 +46,6 @@ MIT
    [node.js]: <http://nodejs.org>
    [express.js]: <http://expressjs.com>
    [socket.io]: <http://socket.io>
-   [xterm.js]: <http://socket.io>
+   [xterm.js]: <http://xtermjs.org>
    [node-pty]: <https://github.com/microsoft/node-pty>
-   [dockerode]: <http://socket.io>
+   [dockerode]: <https://github.com/apocas/dockerode>
