@@ -26,12 +26,21 @@ async function copyFiles(path, directory) {
     try {
         let handledFiles = 0;
         for (const [src, dest] of filePairs) {
+            if (!fs.existsSync(src)) { // Skip this pair if source does not exist
+                console.warn(`File "${src}" is missing.`);
+                continue;
+            }
             const srcStat = await fs.stat(src);
-            const destStat = await fs.stat(dest);
+            
+            let destStat = { mtime:0 }; // Set default destStats
+            if (!fs.existsSync(dest)) { // Ensure the destination directory if the dest file is missing
+                await fs.ensureDir(path.dirname(dest));
+            } else {
+                destStat = await fs.stat(dest);
+            }
 
             // Check if source file is newer than destination file
             if (srcStat.mtime > destStat.mtime) {
-                await fs.ensureDir(path.dirname(dest));
                 await fs.copyFile(src, dest);
                 console.debug(`Copied "${src}" to "${dest}"`);
                 handledFiles++;
