@@ -1,9 +1,5 @@
 #!/bin/sh
 
-# Initialize tunnel variables
-tunnel_url="$1"
-tunnel_port="$2"
-
 ## INFO
 user="$(whoami)"
 host="$(hostname)"
@@ -11,11 +7,11 @@ os='Alpine Linux'
 kernel="$(uname -sr)"
 docker="$(docker -v | awk '{gsub(/,/, "", $3); print $3}')"
 shell="$(grep "^$(id -un):" /etc/passwd | awk -F: '{print $7}')"
+tunnel="$(tunnel)"
 address="$(curl --no-progress-meter ip.y1f.de 2>/dev/null)"
 if [ -z "$address" ]; then
-    address="none"
+    address="localhost"
 fi
-
 
 ## DEFINE COLORS
 bold='\033[1m'
@@ -45,7 +41,7 @@ ${bc}      / /\\ \\  /\\      ${bcb}KERNEL:    ${reset}${kernel}${reset}
 ${bc}     / /  \\ \\/  \\     ${bcb}DOCKER:    ${mcb}${docker}${reset}
 ${bc}    / /    \\ \\/\\ \\    ${bcb}SHELL:     ${reset}${shell}${reset}
 ${bc}   / / /|   \\ \\ \\ \\   ${bcb}ADDRESS:   ${reset}${address}${reset}
-${bc}  /_/ /_|    \\_\\ \\_\\  ${bcb}TUNNEL:    ${ycb}${tunnel_url}${reset} @ PORT ${wc}${tunnel_port}${reset}
+${bc}  /_/ /_|    \\_\\ \\_\\  ${bcb}TUNNEL:    ${ycb}${tunnel}${reset}
 
 ${rc}> ${wc}Use ${ycb}'tunnel'${wc} to display the current tunnel URL.
 ${rc}> ${wc}Use ${ycb}'tunnel <PORT>'${wc} to generate a new tunnel to another port.
