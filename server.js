@@ -81,14 +81,15 @@ async function serverRun() {
 			socket.emit('sessionId', sessionId); // Assign sessionId
 			socket.emit('screenSize'); // Request screen data
 
-			console.log(`Client connected - Session ID: ${sessionId} on ${sessionIp}`);
+			console.log(sessionId, `- Client Connected @ ${sessionIp}`);
 
 			socket.on('cmd', function (data) {
 				try {
 					const cmds = data.split(" ");
+					session.update(sessionId, { timestamp: moment() }); // Update timestamp
 
-					console.debug('Input:', data);
-					if (session.isDebug(sessionId)) socket.emit('output', cmds); // Echo received commands back
+					console.debug(sessionId, `- Input: ${data}`);
+					if (session.isDebug(sessionId)) socket.emit('output', cmds); // Echo received commands back if debugging enabled
 
 					let res;
 					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
@@ -131,21 +132,12 @@ async function serverRun() {
 				} catch (error) { console.error(error); }
 			});
 
-			// Handle disconnection
-			socket.on('disconnect', () => {
-				try {
-					sockets = sockets.filter(s => s !== socket);
-					console.log(`Client disconnected - Session ID: ${sessionId}`);
-				} catch (error) { console.error(error); }
-			});
-
 			socket.on('coordinates', function (data) {
 				try {
-					session.update(sessionId, { timestamp: moment() }); // Update the session timestamp
 					if (data.split(",").length === 4) {
 						let pos = data.split(",");
 						coordinates.handle(socket, sessionId, pos);
-						console.debug('Pos:', pos);
+						console.debug(sessionId, `- Coords: ${pos}`);
 						if (session.isDebug(sessionId)) socket.emit('output', pos);
 					}
 				} catch (error) { console.error(error); }
@@ -154,6 +146,14 @@ async function serverRun() {
 			socket.on('screenSize', function (size) {
 				try {
 					session.update(sessionId, { screenWidth: size.width, screenHeight: size.height});
+				} catch (error) { console.error(error); }
+			});
+
+			// Handle disconnection
+			socket.on('disconnect', () => {
+				try {
+					sockets = sockets.filter(s => s !== socket);
+					console.log(sessionId, `- Client Disconnected @ ${sessionIp}`);
 				} catch (error) { console.error(error); }
 			});
 		});
@@ -211,7 +211,7 @@ function serverRestart(server) {
 }
 function serverShutdown(server) { // Graceful shutdown function, forces shutdown if exit process fails
 	session.storeMap(); // Save current sessionMap
-	sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets on shutdown
+	//sockets.forEach(socket => { socket.disconnect(true); }); // Disconnect sockets on shutdown
     program.close(() => { process.exit(0); });
 	console.log(`${serverName} WebApp stopped`);
     setTimeout(() => { serverTerminate(); }, 250); // Force shutdown if server hasn't stopped within 0.25s
