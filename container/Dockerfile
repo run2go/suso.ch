@@ -1,11 +1,8 @@
-# Use Alpine Linux as base image
+# Use the latest Alpine Linux base image
 FROM alpine:latest
 
-# Define working directory
+# Set the working directory
 WORKDIR /usr/local/bin/
-
-# Install packages
-RUN apk --no-cache add openrc procps nano curl htop net-tools docker
 
 # Download the latest tunnel.sh script & make it executable
 RUN curl https://raw.githubusercontent.com/run2go/tunnel/main/tunnel.sh > /usr/local/bin/tunnel.sh
@@ -19,8 +16,11 @@ COPY splash.sh /usr/local/bin/splash.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/splash.sh
 
-# Define shell
-CMD ["/bin/sh"]
+# Install packages
+RUN apk --no-cache add openrc procps nano curl htop net-tools docker
 
-# Set the entrypoint of the container
+# Set entrypoint script
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Define shell as default command
+CMD ["/bin/sh"]
