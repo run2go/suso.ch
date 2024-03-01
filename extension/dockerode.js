@@ -17,14 +17,12 @@ async function imageCreate() {
         const dockerfilePath = './container/Dockerfile';
         const entrypointPath = './container/entrypoint.sh';
         const splashPath = './container/splash.sh';
-        const tunnelPath = './container/tunnel.sh';
 
-        // Check if the Dockerfile, entrypoint.sh or splash.sh files have been modified
-        const [dockerfileStats, entrypointStats, splashStats, tunnelStats] = await Promise.all([
+        // Check if the Dockerfile, entrypoint.sh or splash.sh file has been modified
+        const [dockerfileStats, entrypointStats, splashStats] = await Promise.all([
             statAsync(dockerfilePath),
             statAsync(entrypointPath),
-            statAsync(splashPath),
-            statAsync(tunnelPath)
+            statAsync(splashPath)
         ]);
 
         // Get the creation date of the Docker image
@@ -42,14 +40,14 @@ async function imageCreate() {
             return (image.RepoTags.includes('<none>') || image.RepoTags.length === 0);
         });
         for (const danglingImage of danglingImages) {
-            console.info(`Removing dangling image: ${danglingImage.Id}`);
+            console.debug(`Removing dangling image: ${danglingImage.Id}`);
             const image = docker.getImage(danglingImage.Id);
             await image.remove({ force: true });
             console.info(`Dangling image ${danglingImage.Id} removed successfully.`);
         }
 
         // Compare modification times of Dockerfile, entrypoint.sh and splash.sh with image creation time
-        if (dockerfileStats.mtime > imgTime || entrypointStats.mtime > imgTime || splashStats.mtime > imgTime || tunnelStats.mtime > imgTime) {
+        if (dockerfileStats.mtime > imgTime || entrypointStats.mtime > imgTime || splashStats.mtime > imgTime) {
 
             // Remove the existing image with the specified name
             const existingImage = images.find(image => image.RepoTags.includes(imageName));
@@ -66,7 +64,7 @@ async function imageCreate() {
             // Create the new image
             docker.buildImage({
                 context: `${mainDir}/container/`,
-                src: ['Dockerfile', 'entrypoint.sh', 'tunnel.sh', 'splash.sh'] },
+                src: ['Dockerfile', 'entrypoint.sh', 'splash.sh'] },
                 { t: `${imageName}:latest` },
                 (err, stream) => {
                     if (err) { console.error(err); return; }

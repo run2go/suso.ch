@@ -32,18 +32,18 @@ function login(socket, sessionId, pass) {
     if (session.isLoggedIn(sessionId)) return logout(socket, sessionId); // Logout if no pass & already logged in
     else if (pass) {
         if (session.comparePassword(sessionId, pass)) {
-            console.debug(`Succeeded login attempt with password "${pass}" from Session ID ${sessionId}`);
+            console.info(sessionId, `- Logged in with: ${pass}`);
             session.update(sessionId, { isLoggedIn: true });
             const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
             socket.emit('eval', validScript);
             return `console.warn("Logged in");`; // Only notify if login is successful
         }
-        else console.debug(`Failed login attempt with password "${pass}" from Session ID ${sessionId}`);
+        else console.debug(sessionId, `- Failed login with: ${pass}`);
     }
 }
 
 function logout(socket, sessionId) {
-    console.log(`Session ID ${sessionId} logged out`);
+    console.info(sessionId, `- Logged out`);
 
     // Update session map with loggedIn status
     session.update(sessionId, { isLoggedIn: false });
@@ -122,7 +122,7 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
 
             // Listen for the exit event
             shell.on('exit', () => {
-                console.info(`Terminal "${containerName || 'local'}" closed from ${sessionId}`);
+                console.info(sessionId, `- Terminal "${containerName || 'local'}" closed`);
                 shell.kill();
                 reset(socket, sessionId);
             });
@@ -130,7 +130,7 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
             // Return the JavaScript code to create the terminal on client-side
             const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
             socket.emit('eval', terminalScript);
-            console.info(`Terminal "${containerName || 'local'}" attached to ${sessionId}`);
+            console.info(sessionId, `- Terminal "${containerName || 'local'}" attached`);
         }
     } else { // Throw generic error
         await dock.containerRemove(containerId);
