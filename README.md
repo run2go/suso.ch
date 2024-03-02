@@ -1,4 +1,4 @@
-# suso.ch
+# suso.ch ![suso.ch](./web/inc/logo.svg)
 ### _Interactive Cross-Platform WebApp_
 #### CLI focused WebApp which temporarily spawns and attaches container terminals
 
@@ -57,6 +57,26 @@ The dynamically spawned containers come with default tools like these:
 
 Additionally, there is the "`net-tools`" package included, providing a collection of various networking utilities.
 
+## Session Map Structure
+Sample sessionMap.json containing the variables per sessionId:
+```json
+[
+    [
+        "<UUID>",
+        {
+            "sessionIp": "1.1.1.1",
+            "containerId": null,
+            "containerName": null,
+            "isDebug": false,
+            "isAdmin": false,
+            "isLoggedIn": false,
+            "screenWidth": 1920,
+            "screenHeight": 1080,
+            "timestamp": "1970-01-01T00:00:00.000Z"
+        }
+    ]
+]
+```
 
 ## License
 
