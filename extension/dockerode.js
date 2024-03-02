@@ -107,7 +107,8 @@ async function containerCreate() {
             StdinOnce: false,
             Cmd: ['/bin/sh'],
             HostConfig: {
-                //AutoRemove: true // Set the --rm flag
+                Memory: 256 * 1000 * 1000, // Limit memory to 256MB
+                StorageOpt: { 'size': '2G' } // Limit disk space to 2GB
             }
         });
 
