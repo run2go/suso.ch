@@ -25,7 +25,8 @@ let program; // Declare program variable
 let sockets = []; // Maintain a list of active sockets
 
 async function serverRun() {
-	try {		
+	try {
+		session.loadAuth(); // Load authData file
 		session.loadMap(); // Load sessionMap file
 		await session.removeExpired(); // Remove expired sessions
 		if (await dock.isRunning) { // Check if Docker is active
