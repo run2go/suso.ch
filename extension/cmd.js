@@ -46,7 +46,7 @@ function logout(socket, sessionId) {
     console.info(sessionId, `- Logged out`);
 
     // Update session map with loggedIn status
-    session.update(sessionId, { isLoggedIn: false });
+    session.update(sessionId, { isDebug: false, isLoggedIn: false, isAdmin: false });
     const validScript = fs.readFileSync('./stream/valid.js', 'utf8');
     socket.emit('eval', validScript);
     return `console.warn("Logged out");`;
