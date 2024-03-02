@@ -96,6 +96,8 @@ async function containerGetName(containerId) {
 
 async function containerCreate() {
     try {
+        if (!isRunning) return; // Break if Docker is not running
+
         // Create a new Docker container with the --rm flag
         const container = await docker.createContainer({
             Image: imageName,
