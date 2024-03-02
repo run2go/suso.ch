@@ -5,7 +5,7 @@
 Makes use of Express.js with Socket.io as WebApp Framework, node-pty along with xterm.js for terminals and dockerode to dynamically control docker containers.
 
 ## Tech
-suso.ch makes use of the following tools & software:
+The suso.ch WebApp makes use of the following tools & software:
 
 - [Node.js] (JavaScript Runtime Environment)
 - [Express.js] (Node.js Webserver Framework)
@@ -14,28 +14,48 @@ suso.ch makes use of the following tools & software:
 - [node-pty] (Fork pseudoterminals in Node.js)
 - [dockerode] (Docker Remote API)
 
-
-## Usage
-Enter "`help`" into the console to get an overview of the available serverside CLI commands.
-
+## Setup
+Download the repository using git
 ```sh
-~♥
+git pull https://github.com/run2go/suso.ch.git
 ```
 
-Detach key sequence:
-`CTRL+P + CTLR+Q `
+Switch into the suso.ch directory
+```sh
+cd suso.ch
+```
 
-## Temporary Container
-The default Dockerfile is used to create containers with basic functionality:
+Build the WebApp image
+```sh
+docker build --tag webapp:latest .
+```
 
-| Function | Description |
+Run a container using the WebApp image
+```sh
+docker run -it -d --name suso -p 80:3000 --cap-add=NET_ADMIN webapp:latest
+```
+
+## Usage
+Attach the console
+```sh
+docker attach suso
+```
+
+Detach the console using: `CTRL+P + CTLR+Q`
+
+Enter "`help`" into the console to get an overview of the available serverside CLI commands.
+
+## Default Container Tools
+The dynamically spawned containers come with default tools like these:
+
+| _Programs_ | _Description_ |
 | ------ | ------ |
-| Cloudflared | Generates temporary URL |
-| Docker | Containerization software |
-| net-tools | Collection of networking utilities |
-| cURL | CLI tool and library |
-| htop | Interactive Task Manager |
-| nano | Simple text editor |
+| `tunnel` | Handle cloudflared quick tunnels |
+| `docker` | Containerization software |
+| `htop` | Interactive Task Manager |
+| `nano` | Simple text editor |
+
+Additionally, there is the "`net-tools`" package included, providing a collection of various networking utilities.
 
 
 ## License
