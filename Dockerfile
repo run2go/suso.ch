@@ -23,5 +23,8 @@ RUN npm ci
 RUN rc-update add sysctl
 RUN rc-update add docker
 
+# Ensure entrypoint is executable
+RUN chmod +x /usr/src/app/entrypoint.sh
+
 # Set the entrypoint of the container
 ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
