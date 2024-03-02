@@ -4,8 +4,8 @@
 wg-quick up /etc/wireguard/wg0.conf
 
 # Enable IP forwarding
-touch /etc/sysctl.conf
 echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
+service networking restart
 
 # Route all outgoing docker traffic through the wireguard interface, or not at all
 iptables -A FORWARD -i wg0 -o docker0 -j ACCEPT
