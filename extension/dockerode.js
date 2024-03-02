@@ -202,6 +202,16 @@ async function containerPurge(map) {
     }
 }
 
+// Check if the Docker instance is running
+async function isDockerActive() {
+    try {
+        await docker.ping(); // Ping the Docker daemon
+        return true; // If ping succeeds, Docker is running
+    } catch (error) {
+        return false; // If ping fails, Docker is not running
+    }
+};
+let isRunning = isDockerActive();
 
 module.exports = {
     imageCreate,
@@ -210,4 +220,5 @@ module.exports = {
     containerRunning,
     containerRemove,
     containerPurge,
+    isRunning
 };

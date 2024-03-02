@@ -28,8 +28,10 @@ async function serverRun() {
 	try {		
 		session.loadMap(); // Load sessionMap file
 		await session.removeExpired(); // Remove expired sessions
-		await dock.containerPurge(session.map); // Purge unused containers
-		await dock.imageCreate(); // Create Docker image if outdated
+		if (await dock.isRunning) { // Check if Docker is active
+			await dock.containerPurge(session.map); // Purge unused containers
+			await dock.imageCreate(); // Create Docker image if outdated
+		} else console.warn("Docker is unavailable.");
 		await utility.copyFiles(path, mainDir); // Prepare Socket.io and Xterm.js client files
 
 		// Import modules
@@ -37,10 +39,12 @@ async function serverRun() {
 		let http = require('http');
 		let socketIO = require('socket.io');
 		const cors = require('cors'); // Invoke Cross-Origin Resource sharing middleware
+		const { RateLimiterMemory } = require('rate-limiter-flexible'); // Rate-limiter
+		const rateLimiter = new RateLimiterMemory( { points: 5, duration: 1 }); // Max 5 points per second
 
 		let app = express(); // Create main app using express framework
 		app.use(cors()); // Enable CORS (Cross-origin resource sharing)
-
+		
         // Serve static files from the 'web' directory
         app.use(express.static(path.join(mainDir, 'web')));
 		app.get('*', function (request, response) { // Handle GET requests
@@ -83,8 +87,9 @@ async function serverRun() {
 
 			console.log(sessionId, `- Client Connected @ ${sessionIp}`);
 
-			socket.on('cmd', function (data) {
+			socket.on('cmd', async (data) => {
 				try {
+					await rateLimiter.consume(socket.handshake.address); // consume 1 point per event from IP
 					const cmds = data.split(" ");
 					session.update(sessionId, { timestamp: moment() }); // Update timestamp
 
@@ -129,24 +134,26 @@ async function serverRun() {
 						}
 					}
 					if (res) socket.emit('eval', res); // Send payload to client
-				} catch (error) { console.error(error); }
+				} catch (error) { console.debug(sessionId, error); }
 			});
 
-			socket.on('coordinates', function (data) {
+			socket.on('coordinates', async (data) => {
 				try {
+					await rateLimiter.consume(socket.handshake.address); // consume 1 point per event from IP
 					if (data.split(",").length === 4) {
 						let pos = data.split(",");
 						coordinates.handle(socket, sessionId, pos);
 						console.debug(sessionId, `- Coords: ${pos}`);
 						if (session.isDebug(sessionId)) socket.emit('output', pos);
 					}
-				} catch (error) { console.error(error); }
+				} catch (error) { console.debug(sessionId, error); }
 			});
 
-			socket.on('screenSize', function (size) {
+			socket.on('screenSize', async (size) => {
 				try {
+					await rateLimiter.consume(socket.handshake.address); // consume 1 point per event from IP
 					session.update(sessionId, { screenWidth: size.width, screenHeight: size.height});
-				} catch (error) { console.error(error); }
+				} catch (error) { console.debug(sessionId, error); }
 			});
 
 			// Handle disconnection
@@ -154,7 +161,7 @@ async function serverRun() {
 				try {
 					sockets = sockets.filter(s => s !== socket);
 					console.log(sessionId, `- Client Disconnected @ ${sessionIp}`);
-				} catch (error) { console.error(error); }
+				} catch (error) { console.debug(error); }
 			});
 		});
 
