@@ -4,6 +4,7 @@
 require('dotenv').config({ path: './config/config.cfg' }); // Access parameters in the config.ini file
 const sessionTimeout = process.env.SESSION_TIMEOUT;
 const sessionMap = process.env.SESSION_MAP;
+const authFile = process.env.AUTH_FILE;
 
 let map = new Map(); // Map Session IDs to track associated sockets & data
 const moment = require('moment'); // Use 'moment' library for timestamp handling
@@ -11,17 +12,27 @@ const uuid = require('uuid');
 const dock = require('./dockerode.js');
 const console = require('./logging.js');
 const fs = require('fs-extra'); // Use file system operations
-const authData = JSON.parse(fs.readFileSync('./config/auth.json', 'utf8')); // Load the auth.json file
-const authList = authData.auth;
-const adminList = authData.admin;
+let authData;
+let authList;
+let adminList;
+
+// Load authData
+function loadAuth() {
+    try {
+        if (fs.existsSync(`./config/${authFile}`)) { // Check if the file exists
+            authData = JSON.parse(fs.readFileSync(`./config/${authFile}`, 'utf8')); // Load the auth.json file
+            authList = authData.auth;
+            adminList = authData.admin;
+            console.info('authData loaded successfully.');
+        } else { console.info('Creating new sessionMap.'); }
+    } catch (error) { console.error('Error loading map:', error); }
+}
 
 // Load last session map from JSON
 function loadMap() {
     try {
-        // Check if the file exists
-        if (fs.existsSync(`./config/${sessionMap}`)) {
-            // Load the map from the file
-            const data = fs.readFileSync(`./config/${sessionMap}`, 'utf8');
+        if (fs.existsSync(`./config/${sessionMap}`)) { // Check if the file exists
+            const data = fs.readFileSync(`./config/${sessionMap}`, 'utf8'); // Load the map from the file
             map = new Map(JSON.parse(data));
             console.info('sessionMap loaded successfully.');
         } else { console.info('Creating new sessionMap.'); }
@@ -29,13 +40,13 @@ function loadMap() {
 }
 
 // Store current session map to JSON
-function storeMap() {
+function storeMap(print=true) {
     try {
         // Convert the map to JSON format
         const jsonData = JSON.stringify(Array.from(map.entries()));
         // Write the JSON data to the file
         fs.writeFileSync(`./config/${sessionMap}`, jsonData, 'utf8');
-        console.info('sessionMap stored successfully.');
+        if(print) console.info('sessionMap stored successfully.');
     } catch (error) { console.error('Error storing map:', error); }
 }
 
@@ -120,18 +131,20 @@ async function removeExpired() {
     for (const [sessionId, sessionData] of map.entries()) {
         if (sessionData.timestamp) {
             const diff = now.diff(sessionData.timestamp, 'minutes');
-            if (diff > sessionTimeout && sessionData.containerId) { // If exists & timed out
+            if (diff > sessionTimeout) { // Check if timed out
                 console.info(sessionId, `- Session expired`);
-                update(sessionId, { containerId: null, containerName: null });
-                if (await dock.isRunning) await dock.containerRemove(sessionData.containerId);
+                // Remove container if it exists & docker is running
+                if (await dock.isRunning && sessionData.containerId) await dock.containerRemove(sessionData.containerId);
                 map.delete(sessionId); // Delete the timed out session entry
             }
         }
     }
+    storeMap(false); // update sessionMap.json every 60s
 }
 
 module.exports = {
     map,
+    loadAuth,
     loadMap,
     storeMap,
     read,
