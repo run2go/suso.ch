@@ -2,7 +2,7 @@
 FROM alpine:latest
 
 # Install packages
-RUN apk --no-cache add openrc sudo wireguard-tools wireguard-tools-wg-quick iptables docker npm nodejs
+RUN apk --no-cache add openrc sudo wireguard-tools wireguard-tools-wg-quick iptables docker npm nodejs python3 g++ make
 
 # Create app directory
 RUN mkdir -p /usr/src/app
@@ -17,13 +17,11 @@ WORKDIR /usr/src/app/
 RUN cp /usr/src/app/config/wg.conf /etc/wireguard/wg0.conf
 
 # Install app dependencies
-RUN npm install
+RUN npm ci
 
 # Add services to rc-update
 RUN rc-update add sysctl
 RUN rc-update add docker
-RUN rc-update add sysctl 
-#RUN rc-update add wg
 
 # Set the entrypoint of the container
 ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
