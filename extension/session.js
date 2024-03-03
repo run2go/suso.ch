@@ -75,7 +75,7 @@ function create() {
 }
 
 function init(sessionId) {
-    update(sessionId, {sessionIp: null, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: null});
+    update(sessionId, {sessionIp: null, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: moment() });
 }
 
 // Function to validate session UUIDs

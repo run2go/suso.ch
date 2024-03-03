@@ -82,7 +82,7 @@ async function serverRun() {
 			// Generate client UUID if missing or invalid
 			if (!session.isValid(sessionId)) sessionId = session.create(); // Generate new sessionId
 			session.init(sessionId);
-			session.update(sessionId, { sessionIp: sessionIp, timestamp: moment() }); // Store sessionIp
+			session.update(sessionId, { sessionIp: sessionIp }); // Store sessionIp
 			socket.emit('sessionId', sessionId); // Assign sessionId
 			socket.emit('screenSize'); // Request screen data
 
