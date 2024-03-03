@@ -19,7 +19,7 @@ RUN cp /usr/src/app/config/wg.conf /etc/wireguard/wg0.conf
 
 # Install packages
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --fix-missing \
     sudo iptables iproute2 openresolv systemd wireguard-tools npm nodejs python3 g++ make ca-certificates curl gpg nano && \
     rm -rf /var/lib/apt/lists/*
 
