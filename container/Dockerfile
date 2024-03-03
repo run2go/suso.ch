@@ -4,7 +4,7 @@ FROM debian:bookworm-slim
 # Install packages
 RUN apt-get update && \
     apt-get install -y --fix-missing \
-    curl nano wget net-tools procps htop iptables iproute2 openresolv systemd gpg && \
+    curl nano wget net-tools procps htop iptables iproute2 openresolv systemd gpg iputils-ping && \
     rm -rf /var/lib/apt/lists/*
 
 # Add Docker's official GPG key

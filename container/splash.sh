@@ -7,7 +7,6 @@ os="Debian $(cat /etc/debian_version)"
 kernel="$(uname -sr)"
 docker="$(docker -v | awk '{gsub(/,/, "", $3); print $3}')"
 shell="$(grep "^$(id -un):" /etc/passwd | awk -F: '{print $7}')"
-uptime="$(uptime -p | sed 's/up //')"
 tunnel="$(/usr/local/bin/tunnel.sh)"
 address="$(curl --no-progress-meter ip.y1f.de 2>/dev/null)"
 if [ -z "$address" ]; then
@@ -42,11 +41,10 @@ printf "
               ${yc}${user}${reset}@${yc}${host}
 ${rc}     ,---._   ${cc}OS:        ${reset}${os}
 ${rc}   /\`  __  \\  ${cc}KERNEL:    ${reset}${kernel}
-${rc}  |   /    |  ${cc}UPTIME:    ${reset}${uptime}
-${rc}  |   ${wc}\`.__.\`  ${cc}DOCKER:    ${yc}${docker}
-${rc}   \          ${cc}SHELL:     ${reset}${shell}
-${rc}    \`-,_      ${cc}ADDRESS:   ${reset}${address}
-${rc}              ${cc}TUNNEL:    ${tun}${tunnel}${reset}
+${rc}  |   /    |  ${cc}DOCKER:    ${yc}${docker}
+${rc}  |   ${wc}\`.__.\`  ${cc}SHELL:     ${reset}${shell}
+${rc}   \          ${cc}ADDRESS:   ${reset}${address}
+${rc}    \`-,_      ${cc}TUNNEL:    ${tun}${tunnel}${reset}
 
 ${rc}> ${wc}Use ${yc}'tunnel'${wc} to display the current tunnel URL.
 ${rc}> ${wc}Use ${yc}'tunnel <PORT>'${wc} to generate a new tunnel to another port.
