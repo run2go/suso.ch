@@ -86,6 +86,7 @@ async function imageCreate() {
     } catch (error) { console.error('Failed to create Docker image: ', error); }
 }
 
+// Get containerName from containerId
 async function containerGetName(containerId) {
     const container = docker.getContainer(containerId); // Retrieve container object
     const containerInfo = await container.inspect(); // Get the container info
@@ -96,7 +97,7 @@ async function containerGetName(containerId) {
 
 async function containerCreate() {
     try {
-        if (!isRunning) return; // Break if Docker is not running
+        if (isRunning = isDockerActive()) return; // Break if Docker engine is not running
 
         // Create a new Docker container with the --rm flag
         const container = await docker.createContainer({
