@@ -19,8 +19,8 @@ RUN cp /usr/src/app/config/wg.conf /etc/wireguard/wg0.conf
 
 # Install packages
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    sudo iptables iproute2 openresolv systemd wireguard-tools npm nodejs python3 g++ make ca-certificates curl gpg procps && \
+    apt-get install -y --fix-missing \
+    sudo iptables iproute2 openresolv systemd wireguard-tools npm nodejs python3 g++ make ca-certificates curl gpg nano && \
     rm -rf /var/lib/apt/lists/*
 
 # Add Docker's official GPG key
@@ -38,6 +38,13 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
+
+# Adjust Docker specific ulimit
+RUN \
+    echo "ulimits: $(ulimit -Sn):$(ulimit -Hn)"; \
+    sed -i 's/ulimit -Hn/# ulimit -Hn/g' /etc/init.d/docker; \
+    service docker start; \
+    rm -rf /var/cache/apt;
 
 # Install app dependencies
 RUN npm ci
