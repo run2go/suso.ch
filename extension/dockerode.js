@@ -1,8 +1,10 @@
 // extension/dockerode.js
 
-
 require('dotenv').config({ path: './config/config.cfg' }); // Access parameters in the config.ini file
 const imageName = process.env.DOCKER_IMAGE;
+const containerMemory = process.env.DOCKER_MEMORY;
+const containerDiskspace = process.env.DOCKER_DISKSPACE;
+
 // Require dockerode for container management
 const Docker = require('dockerode');
 const docker = new Docker();
@@ -97,30 +99,30 @@ async function containerGetName(containerId) {
 
 async function containerCreate() {
     try {
-        if (isRunning = isDockerActive()) return; // Break if Docker engine is not running
-
-        // Create a new Docker container with the --rm flag
-        const container = await docker.createContainer({
-            Image: imageName,
-            Tty: true,
-            AttachStdin: true,
-            AttachStdout: true,
-            AttachStderr: true,
-            OpenStdin: true,
-            StdinOnce: false,
-            Cmd: ['/bin/sh'],
-            HostConfig: {
-                Memory: 256 * 1000 * 1000, // Limit memory to 256MB
-                StorageOpt: { 'size': '2G' } // Limit disk space to 2GB
-            }
-        });
-
-        // Start the container
-        await container.start();
-
-        // Return the containerId
-        return container.id;
-    } catch (error) { console.error('Error creating and starting Docker container:', error); }
+        if (isRunning = isDockerActive()) {
+            // Create a new Docker container with the --rm flag
+            const container = await docker.createContainer({
+                Image: imageName,
+                Tty: true,
+                AttachStdin: true,
+                AttachStdout: true,
+                AttachStderr: true,
+                OpenStdin: true,
+                StdinOnce: false,
+                Cmd: ['/bin/sh'],
+                HostConfig: {
+                    Memory: containerMemory * 1000 * 1000,
+                    StorageOpt: { 'size': `${containerDiskspace}G` }
+                }
+            });
+    
+            // Start the container
+            await container.start();
+    
+            // Return the containerId
+            return container.id;
+        } else throw "Docker engine not running"; // Break if Docker engine is not running
+    } catch (error) { console.error('Error creating and starting container:', error); }
 }
 
 // Function to check if a container is running
