@@ -1,10 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
-# Enable docker daemon, redirect output to /dev/null
+# Run docker requirements
+containerd >/dev/null 2>&1 &
 dockerd >/dev/null 2>&1 &
-
-# Enable IP forwarding
-sudo sysctl -w net.ipv4.ip_forward=1
 
 # Route all outgoing docker traffic through the wireguard interface, or not at all
 iptables -A FORWARD -i wg0 -o docker0 -j ACCEPT
