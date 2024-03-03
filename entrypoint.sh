@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Start docker service
+service docker start
+
 # Route all outgoing docker traffic through the wireguard interface, or not at all
 iptables -A FORWARD -i wg0 -o docker0 -j ACCEPT
 iptables -A FORWARD -i docker0 -o wg0 -j ACCEPT
