@@ -1,14 +1,14 @@
-#!/bin/sh
+#!/bin/bash
 
-# Define the path to the .bashrc file
-bashrc_file="/root/.bashrc"
+# Run docker requirements
+containerd >/dev/null 2>&1 &
+dockerd >/dev/null 2>&1 &
 
-# Define the alias and append it to the .bashrc file
-echo 'alias tunnel="/usr/local/bin/tunnel.sh"' >> "$bashrc_file"
-source "$bashrc_file"
+# Append an extra command to tunnel.sh, allowing tunnel.sh to run splash.sh
+echo '/usr/local/bin/splash.sh "$tunnel"' >> '/usr/local/bin/tunnel.sh'
 
-# Initialize tunnel and retrieve address & port
-tunnel=$(tunnel)
+# Run "tunnel", have its output routed to /dev/null this once
+tunnel >/dev/null 2>&1 &
 
-# Run splash.sh with tunnel data
-/usr/local/bin/splash.sh "$tunnel"
+# Start shell
+exec "$@"
