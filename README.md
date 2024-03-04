@@ -45,7 +45,7 @@ Detach the console using: `CTRL+P + CTLR+Q`
 
 Enter "`help`" into the console to get an overview of the available serverside CLI commands.
 
-## Default Container Tools
+## Container Tools
 The dynamically spawned containers come with default tools like these:
 
 | _Programs_ | _Description_ |
@@ -55,7 +55,7 @@ The dynamically spawned containers come with default tools like these:
 | `htop` | Interactive Task Manager |
 | `nano` | Simple text editor |
 
-Additionally, there is the "`net-tools`" package included, providing a collection of various networking utilities.
+Additionally, there is the "`net-tools`" package included, providing various networking utilities.
 
 ## Session Map Structure
 Sample sessionMap.json containing the variables per sessionId:
