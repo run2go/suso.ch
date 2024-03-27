@@ -59,5 +59,5 @@ function initializeTerminal() {
     term.focus();
 }
 
-// Wait 100ms for xterm files to load
-setTimeout(() => { initializeTerminal(); }, 300);
+// Wait 200ms for xterm files to load
+setTimeout(() => { initializeTerminal(); }, 200);
