@@ -66,7 +66,8 @@ async function imageCreate() {
             // Create the new image
             docker.buildImage({
                 context: `${mainDir}/container/`,
-                src: ['Dockerfile', 'entrypoint.sh', 'splash.sh'] },
+                src: ['.'] },
+                //src: ['Dockerfile', 'entrypoint.sh', 'splash.sh', 'bashrc'] },
                 { t: `${imageName}:latest` },
                 (err, stream) => {
                     if (err) { console.error(err); return; }
@@ -97,9 +98,13 @@ async function containerGetName(containerId) {
     return containerName; // Return extracted name
 }
 
-async function containerCreate() {
+const utility = require('./utility.js'); // Require utility extension
+async function containerCreate(sessionId) {
     try {
         if (isRunning = isDockerActive()) {
+            // Generate random container name
+            //let containerName = utility.generateName();
+
             // Create a new Docker container with the --rm flag
             const container = await docker.createContainer({
                 Image: imageName,
@@ -109,10 +114,16 @@ async function containerCreate() {
                 AttachStderr: true,
                 OpenStdin: true,
                 StdinOnce: false,
-                Cmd: ['/bin/sh'],
+                name: sessionId,
+                Hostname: sessionId,
+                //Cmd: ['/bin/bash'],
+                Cmd: ['/bin/bash'],
+                //Env: [
+                //    `CONTAINER_NAME=${containerName}`
+                //],
                 HostConfig: {
-                    Memory: containerMemory * 1000 * 1000,
-                    StorageOpt: { 'size': `${containerDiskspace}G` }
+                    Memory: containerMemory * 1024 * 1024,
+                    //StorageOpt: { 'size': `${containerDiskspace}G` }
                 }
             });
     
@@ -225,5 +236,6 @@ module.exports = {
     containerRunning,
     containerRemove,
     containerPurge,
+    containerExists,
     isRunning
 };
