@@ -76,13 +76,16 @@ async function serverRun() {
 		io.on('connection', (socket) => {
 			const moment = require('moment'); // Use 'moment' library for timestamp handling
 			sockets.push(socket); // Add new sockets entry
-			let sessionId = socket.handshake.query.sessionId; // Retreive sessionId from client
+			let sessionId = socket.handshake.query.sessionId; // Retrieve sessionId from client
 			let sessionIp = socket.handshake.headers["x-forwarded-for"] || socket.handshake.address; // Use "x-forwarded-for", or fall back to address
 
 			// Generate client UUID if missing or invalid
-			if (!session.isValid(sessionId)) sessionId = session.create(); // Generate new sessionId
-			session.init(sessionId);
-			session.update(sessionId, { sessionIp: sessionIp }); // Store sessionIp
+			if (!session.isValid(sessionId, sessionIp)) {
+				sessionId = session.create(); // Generate new unused sessionId		
+				session.init(sessionId, sessionIp); // Initialize connection, provide sessionIp
+			}
+			//else session.init(sessionId); // Initialize connection
+
 			socket.emit('sessionId', sessionId); // Assign sessionId
 			socket.emit('screenSize'); // Request screen data
 
@@ -99,7 +102,7 @@ async function serverRun() {
 
 					let res;
 					const publicCommands = ['info', 'alert', 'login', 'reload', 'help', 'theme', 'github'];
-					const privateCommands = ['logout', 'console', 'escape', 'exit', 'debug'];
+					const privateCommands = ['logout', 'console', 'reset', 'escape', 'exit', 'debug'];
 					const adminCommands = ['terminal'];
 					// Check if the command partially matches any of the public commands
 					const partialPublicMatch = publicCommands.find(command => command.startsWith(cmds[0].toLowerCase()));
@@ -124,6 +127,7 @@ async function serverRun() {
 						switch(partialPrivateMatch) {
 							case 'logout': res = cmd.logout(socket, sessionId); break;
 							case 'console': cmd.terminal(socket, sessionId); break;
+							case 'reset': cmd.resetTerminal(socket, sessionId); break;
 							case 'debug': res = cmd.debug(sessionId); break;
 							case 'escape':
 							case 'exit': cmd.reset(socket); break;
@@ -184,20 +188,25 @@ async function serverRun() {
 			console.debug("Transmitted Data: " + request.body);
 		}
 
-		process.stdin.resume();
-		process.stdin.setEncoding('utf8');
-		process.stdin.on('data', function (text) { // Allow console commands
-			switch(text.trim().toLowerCase()) {
-				case 'restart': serverRestart(server); break;
-				case 'stop': serverShutdown(server); break;
-				case 'debug': console.log(`Debug Status: ${console.toggleDebug()}`); break;
-				case 'help': console.log(helpText); break;
-				case 'print': session.printMap(); break;
+		const commands = ['', 'debug', 'reload', 'restart', 'quit', 'stop', 'help', 'print', 'test']; // Available cmds
+		process.stdin.setEncoding('utf8')
+		process.stdin.on('data', function (text) { // Handle console commands
+			const consoleInput = text.trim().split(" ");
+			const partialCommandMatch = commands.find(cmd => cmd.startsWith(consoleInput[0].toLowerCase())); // Check for partial cmd match
+			switch(partialCommandMatch) {
 				case '': break; // Handle empty cmds (e.g. just 'Enter')
-				default: console.log(`Unknown command`);
+				case 'debug': console.info(`Debug Status: ${console.toggleDebug() ? 'Enabled' : 'Disabled'}`); break;
+				case 'reload':
+				case 'restart': serverRestart(server); break;
+				case 'quit':
+				case 'stop': serverShutdown(server); break;
+				case 'print': session.printMap(); break;
+				case 'test': console.debug(utility.generateName()); break;
+				default: console.info(`Unknown command`); break;
 			}
 		});
-		
+
+
 		console.log(`${serverName} WebApp started`); // Notify that the server has been started
 		program = server.listen(serverPort, () => { // Bind the server to the specified port
 			console.log(`Now listening on ${serverAddress}:${serverPort}`);
