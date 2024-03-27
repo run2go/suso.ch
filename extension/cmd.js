@@ -70,7 +70,7 @@ function debug(sessionId) {
 
 async function terminal(socket, sessionId, local = false) { // Create terminal for the client
     // Retrieve containerId, containerName and screen size of active sessionId
-    let {containerId, containerName, screenWidth, screenHeight} = session.read(sessionId, ['containerId', 'containerName', 'screenWidth', 'screenHeight']);
+    let {containerId, screenWidth, screenHeight} = session.read(sessionId, ['containerId', 'screenWidth', 'screenHeight']);
 
     // Use the stored screen size information to calculate cols and rows
     const cols = Math.floor(screenWidth / 8); // Character width of 8px
@@ -90,51 +90,55 @@ async function terminal(socket, sessionId, local = false) { // Create terminal f
         shell.write(isWin32 ? 'echo Hello!\r\n' : 'clear && cat /etc/motd\n');
     }
     if (!local && !containerId) { // Spawn new container if containerId is missing
-        containerId = await dock.containerCreate(); // Create new container
-        containerName = await dock.containerGetName(containerId); // Retrieve generated container name
+        containerId = await dock.containerCreate(sessionId); // Create new container
     }
 
     // Proceed if container is running
-    const isContainerRunning = await dock.containerRunning(containerId);
-    if (isContainerRunning) {
-        session.update(sessionId, { containerId: containerId, containerName: containerName });
-
-        if (!local && containerName) { // Attach container console
-            shell = pty.spawn('docker', ['attach', `${containerName}`], {
-                name: 'xterm-color',
-                cols: cols,
-                rows: rows,
-                cwd: process.env.HOME,
-                env: process.env
-            });
-        } 
-
-        if (shell) {
-            // Pipe the output of the pseudo-terminal to the socket reaching the client
-            shell.onData(data => {
-                socket.emit('terminalOutput', data);
-            });
-
-            // Handle input from the client and write it to the pseudo-terminal
-            socket.on('terminalInput', input => {
-                shell.write(input);
-            });
-
-            // Listen for the exit event
-            shell.on('exit', () => {
-                console.info(sessionId, `- Terminal "${containerName || 'local'}" closed`);
-                shell.kill();
-                reset(socket, sessionId);
-            });
-            
-            // Return the JavaScript code to create the terminal on client-side
-            const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
-            socket.emit('eval', terminalScript);
-            console.info(sessionId, `- Terminal "${containerName || 'local'}" attached`);
+    const doesContainerExist = await dock.containerExists(containerId);
+    if (doesContainerExist) {
+        const isContainerRunning = await dock.containerRunning(containerId);
+        if (isContainerRunning) {
+            session.update(sessionId, { containerId: containerId });
+    
+            if (!local) { // Attach container console
+                shell = pty.spawn('docker', ['attach', `${sessionId}`], {
+                    name: 'xterm-color',
+                    cols: cols,
+                    rows: rows,
+                    cwd: process.env.HOME,
+                    env: process.env
+                });
+                shell.write('clear && cat /etc/motd\n');
+            }
+    
+            if (shell) {
+                // Pipe the output of the pseudo-terminal to the socket reaching the client
+                shell.onData(data => {
+                    socket.emit('terminalOutput', data);
+                });
+    
+                // Handle input from the client and write it to the pseudo-terminal
+                socket.on('terminalInput', input => {
+                    shell.write(input);
+                });
+    
+                // Listen for the exit event
+                shell.on('exit', () => {
+                    console.info(sessionId, `- Terminal "${sessionId || 'local'}" closed`);
+                    shell.kill();
+                    reset(socket, sessionId);
+                });
+                
+                // Return the JavaScript code to create the terminal on client-side
+                const terminalScript = fs.readFileSync('./stream/terminal.js', 'utf8');
+                socket.emit('eval', terminalScript);
+                console.info(sessionId, `- Terminal "${sessionId || 'local'}" attached`);
+            }
+        } else { // Throw generic error
+            await dock.containerRemove(containerId);
+            session.update(sessionId, { containerId: null });
+            socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
         }
-    } else { // Throw generic error
-        await dock.containerRemove(containerId);
-        socket.emit('eval', `console.warn("Couldn't connect to terminal");`);
     }
 }
 
