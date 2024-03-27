@@ -67,22 +67,29 @@ function update(sessionId, newData) {
     map.set(sessionId, updatedData);
 }
 
-// Function to generate UUIDs as session IDs
+const utility = require('./utility.js');
+// Function to generate new unused ysessionId
 function create() {
-    sessionId = uuid.v4();
-    map.set(sessionId);
+    //let sessionId = uuid.v4();
+    let sessionId = utility.generateName();
+    if (map.get(sessionId)) create(); // Generate new sessionId if generated name already exists
+    else map.set(sessionId);
     return sessionId;
 }
 
-function init(sessionId) {
-    update(sessionId, {sessionIp: null, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: moment() });
+// Initialize a new session, setting default values
+function init(sessionId, sessionIp = null) {
+    update(sessionId, { sessionIp: sessionIp, containerId: null, containerName: null, isDebug: false, isAdmin: false, isLoggedIn: false, screenWidth: 0, screenHeight: 0, timestamp: moment() });
 }
 
-// Function to validate session UUIDs
-function isValid(sessionId) {
-    return !!(map.has(sessionId));
+// Function to validate sessions
+function isValid(sessionId, sessionIp) {
+    if (map.has(sessionId)){
+        let storedIp = map.get(sessionId).sessionIp;
+        return !!(storedIp === sessionIp);
+    }
+    return false;
 }
-
 // Function to check if a session is logged in
 function isLoggedIn(sessionId) {
     return !!(map.get(sessionId).isLoggedIn);
