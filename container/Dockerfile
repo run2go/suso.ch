@@ -1,43 +1,22 @@
-# Use debian:bookworm-slim as the base image
-FROM debian:bookworm-slim
+# Use the latest Alpine Linux image
+FROM alpine:latest
+
+# Define the working directory
+WORKDIR /usr/local/bin/
 
 # Install packages
-RUN apt-get update && \
-    apt-get install -y --fix-missing \
-    curl nano wget net-tools procps htop iptables iproute2 openresolv systemd gpg iputils-ping && \
-    rm -rf /var/lib/apt/lists/*
-
-# Add Docker's official GPG key
-RUN mkdir -m 0755 -p /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker-archive-keyring.gpg
-
-# Set up Docker repository
-RUN echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
-    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-    tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
-    rm -rf /var/lib/apt/lists/*
-
-# Adjust Docker specific ulimit
-RUN \
-    echo "ulimits: $(ulimit -Sn):$(ulimit -Hn)"; \
-    sed -i 's/ulimit -Hn/# ulimit -Hn/g' /etc/init.d/docker; \
-    service docker start; \
-    rm -rf /var/cache/apt;
+RUN apk --no-cache add openrc procps bash nano curl htop net-tools
 
 # Download the latest tunnel.sh script & make it executable
 RUN curl -L https://raw.githubusercontent.com/run2go/tunnel/main/tunnel.sh > /usr/local/bin/tunnel.sh && \
-    chmod +x+w /usr/local/bin/tunnel.sh
+    chmod +x /usr/local/bin/tunnel.sh
 
 # Define global alias 
-RUN echo 'alias tunnel="/usr/local/bin/tunnel.sh"' >> '/etc/bash.bashrc'
+#RUN echo 'alias tunnel="/usr/local/bin/tunnel.sh"' >> '/etc/bash.bashrc'
+RUN echo 'alias tunnel="/usr/local/bin/tunnel.sh"' >> '/root/.profile'
 
-# Copy the container scripts into the container
+# Copy file into the container image
+COPY bashrc /root/bashrc
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY splash.sh /usr/local/bin/splash.sh
 

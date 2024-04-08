@@ -34,19 +34,13 @@
         var session = localStorage.getItem('sessionId');
         if (localStorage.getItem('sessionId') !== null) {
             socket = io({
-                query: { sessionId: session } // Retrieve Session ID from localStorage
+                query: { sessionId: session } // Retrieve sessionId from localStorage
             });
         }
         else socket = io();
 
-        // Event listener to receive Session ID from the server
-        socket.on('sessionId', function(sessionId) {
-            localStorage.setItem('sessionId', sessionId); // Store Session ID in localStorage
-            console.log('Received - Session ID:', sessionId);
-        });
-
         let cmd = '';
-        let timeout = 1000;
+        let timeout = 1000; // 1s timeout
         document.addEventListener('keydown', inputCommand);
         document.addEventListener('click', function(event) { send(event.clientX, event.clientY); });
         function inputCommand(e) {
@@ -88,6 +82,13 @@
             if (prefersLightMode) send('t');
         }
         document.addEventListener("DOMContentLoaded", setTheme);
+
+        // Event listener to receive Session ID from the server
+        socket.on('sessionId', function(sessionId) {
+            localStorage.setItem('sessionId', sessionId); // Store sessionId in localStorage
+            session = sessionId; // Cache sessionId
+            console.log('Received - Session ID:', sessionId);
+        });
 
         socket.on('connect', () => {
             console.log(`Connected - Session ID: ${session}`); // Obsolete

@@ -54,6 +54,20 @@ async function copyFiles(path, directory) {
     }
 }
 
+function generateName() {
+    const attributes = ["adventurous", "alone", "altruistic", "amiable", "animated", "ardent", "artistic", "assertive", "attractive", "inspiring", "blissful", "bold", "brave", "buoyant", "charismatic", "compassionate", "creative", "cute", "daring", "dynamic", "elegant", "ethereal", "exuberant", "fearless", "fluffy", "generous", "genuine", "graceful", "harmonious", "heartfelt", "hopeful", "insightful", "joyful", "jubilant", "lively", "luminous", "majestic", "meticulous", "mysterious", "noble", "novel", "nurturing", "observant", "optimistic", "opulent", "original", "outgoing", "passionate", "perceptive", "pioneering", "playful", "powerful", "precious", "pristine", "proactive", "purposeful", "quirky", "radiant", "receptive", "reflective", "refreshing", "resilient", "reverent", "rewarding", "robust", "scholarly", "serene", "sexy", "shimmering", "sincere", "sociable", "solid", "soothing", "sophisticated", "soulful", "spirited", "spontaneous", "steadfast", "sublime", "suspicious", "synergistic", "tenacious", "therapeutic", "thoughtful", "timeless", "tolerant", "tranquil", "trustworthy", "upbeat", "versatile", "vibrant", "visionary", "vivacious", "whimsical", "wise", "witty"];
+    const animals = ["albatross", "alligator", "antelope", "ape", "armadillo", "baboon", "badger", "bat", "beagle", "bear", "beaver", "bison", "boar", "buffalo", "bull", "camel", "cat", "chameleon", "cheetah", "chihuahua", "chimpanzee", "chinchilla", "cobra", "cow", "crab", "crocodile", "crow", "deer", "dodo", "dog", "dolphin", "donkey", "duck", "eagle", "eel", "elephant", "elk", "emu", "fish", "flamingo", "fox", "frog", "giraffe", "goat", "goose", "gorilla", "hamster", "hare", "hawk", "hedgehog", "hen", "hippo", "horse", "iguana", "jackal", "jaguar", "jellyfish", "kangaroo", "koala", "lemur", "leopard", "lion", "lizard", "llama", "lynx", "mammoth", "mole", "monitor", "monkey", "mouse", "mule", "orangutan", "ostrich", "otter", "owl", "panda", "panther", "peacock", "pigeon", "polar", "possum", "rabbit", "racoon", "rat", "rhino", "shark", "sheep", "sloth", "snake", "squirrel", "swan", "tiger", "tortoise", "turtle", "vulture", "whale", "wolf", "wombat", "zebra"];
+  
+    // Randomly select an attribute and an animal
+    const randomAttribute = attributes[Math.floor(Math.random() * attributes.length)];
+    const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+  
+    // Combine them to create a name
+    return randomAttribute + '-' + randomAnimal;
+}
+  
+
 module.exports = {
     copyFiles,
+    generateName
 };

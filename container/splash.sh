@@ -3,9 +3,16 @@
 ## INFO
 user="$(whoami)"
 host="$(hostname)"
-os="Debian $(cat /etc/debian_version)"
+os="$(grep '^PRETTY_NAME' /etc/os-release | cut -d'=' -f2 | tr -d '"')"
 kernel="$(uname -sr)"
-docker="$(docker -v | awk '{gsub(/,/, "", $3); print $3}')"
+
+memory_current=$(cat /sys/fs/cgroup/memory.current)
+memory_max=$(cat /sys/fs/cgroup/memory.max)
+memory_usage_mb=$(echo "$memory_current" | awk '{printf "%.0f", $1/1048576}')
+memory_limit_mb=$(echo "$memory_max" | awk '{printf "%.0f", $1/1048576}')
+memory_percentage=$(echo "$memory_current $memory_max" | awk '{printf "%.2f", ($1/$2)*100}')
+memory="$(echo "$memory_usage_mb/$memory_limit_mb""MB ($memory_percentage%)")"
+
 shell="$(grep "^$(id -un):" /etc/passwd | awk -F: '{print $7}')"
 tunnel="$(/usr/local/bin/tunnel.sh)"
 address="$(curl --no-progress-meter ip.y1f.de 2>/dev/null)"
@@ -14,14 +21,10 @@ if [ -z "$address" ]; then
 fi
 
 ## DEFINE COLORS
-bold='\033[1m'
-black='\033[0;30m'
 red='\033[0;31m'
 green='\033[0;32m'
 yellow='\033[0;93m'
 blue='\033[0;34m'
-purple='\033[0;95m'
-magenta='\033[0;35m'
 cyan='\033[0;36m'
 white='\033[0;37m'
 ul_link='\033[4;36m'
@@ -38,15 +41,15 @@ tun="${reset}${ul_link}"
 
 ## OUTPUT
 printf "
-              ${yc}${user}${reset}@${yc}${host}
-${rc}     ,---._   ${cc}OS:        ${reset}${os}
-${rc}   /\`  __  \\  ${cc}KERNEL:    ${reset}${kernel}
-${rc}  |   /    |  ${cc}DOCKER:    ${yc}${docker}
-${rc}  |   ${wc}\`.__.\`  ${cc}SHELL:     ${reset}${shell}
-${rc}   \          ${cc}ADDRESS:   ${reset}${address}
-${rc}    \`-,_      ${cc}TUNNEL:    ${tun}${tunnel}${reset}
+${bc}        /\\                     ${yc}%s${reset}@${yc}%s
+${bc}       /  \\           ${cc}OS:      ${reset}${gc}%s
+${bc}      / /\\ \\  /\\      ${cc}KERNEL:  ${reset}%s
+${bc}     / /  \\ \\/  \\     ${cc}MEMORY:  ${reset}%s
+${bc}    / /    \\ \\/\\ \\    ${cc}SHELL:   ${reset}${gc}%s
+${bc}   / / /|   \\ \\ \\ \\   ${cc}ADDRESS: ${reset}%s
+${bc}  /_/ /_|    \\_\\ \\_\\  ${cc}TUNNEL:  ${tun}%s
 
 ${rc}> ${wc}Use ${yc}'tunnel'${wc} to display the current tunnel URL.
-${rc}> ${wc}Use ${yc}'tunnel <PORT>'${wc} to generate a new tunnel to another port.
+${rc}> ${wc}Use ${yc}'tunnel <PORT/ADDRESS>'${wc} to generate a new tunnel to another port.
 
-" > /etc/motd
+" "$user" "$host" "$os" "$kernel" "$memory" "$shell" "$address" "$tunnel" > /etc/motd
