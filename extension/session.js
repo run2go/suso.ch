@@ -68,7 +68,7 @@ function update(sessionId, newData) {
 }
 
 const utility = require('./utility.js');
-// Function to generate new unused ysessionId
+// Function to generate new unused sessionId
 function create() {
     //let sessionId = uuid.v4();
     let sessionId = utility.generateName();
