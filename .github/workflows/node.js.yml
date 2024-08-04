@@ -3,7 +3,7 @@ name: Node.js Testsuite [Continuous Integration]
 on:
   # Run every time a change is pushed to 'development'.
   push:
-    branches: [development]
+    branches: [dev]
     paths:
       - '**/*.js'
       - '**/*.cfg'
